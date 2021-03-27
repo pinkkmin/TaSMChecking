@@ -1,0 +1,1 @@
+/usr/bin/c++ -fPIC   -shared -Wl,-soname,libaddFunc.so -o /root/TaSMChecking/test/add-function-from-lib/libaddFunc.so CMakeFiles/addFunc.dir/module.cpp.o 

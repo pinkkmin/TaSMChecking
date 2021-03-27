@@ -1,0 +1,2 @@
+/usr/bin/ar qc /root/TaSMChecking/test/add-function-from-lib/libtest.a  CMakeFiles/test.dir/libTest.c.o
+/usr/bin/ranlib /root/TaSMChecking/test/add-function-from-lib/libtest.a
