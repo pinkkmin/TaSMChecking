@@ -33,10 +33,12 @@ $  opt -load ./libaddFunc.so -addFunc test.bc
 ### Clang
 
 ```bash
-$ clang++ -Xclang -load -Xclang src/libTest.so main.c -lrt -lm -L. -lpass1 -o main
+$ clang++ -Xclang -load -Xclang src/libaddFunc.so test.cpp -lrt -lm -L. -ltest -o test
 ```
 
 ## Others
+
+设置链接路径不然找不到库`export LD_LIBRARY_PATH=.`
 
 ```bash
 $ nm libtest.a
