@@ -12,13 +12,14 @@
 #include <unistd.h>
 #include <assert.h>
 
-/***************define******************
+/*************** protocol of symbol******************
  * all const, var, func, define: 以下划线_开头
  * define : 下划线分割，全部大写
- * func：下划线加驼峰
+ * func：下划线加驼峰 _f_checkingTemporalAndSpatital()
  * global：_g_ 
  * const：全部大写加下划线
-**************************************/
+ * 局部： 随意 最好不要乱起
+ *****************************************************/
 
 #define _MMAP_FLAGS (MAP_PRIVATE|MAP_ANONYMOUS|MAP_NORESERVE)
 
@@ -42,9 +43,9 @@ static const size_t _TRIE_SECONDARY_TABLE_ENTRIES = ((size_t) 4 * (size_t) 1024 
 
 
 // for trie table
-_tasmc_trie_entry** _trie_table;
-_tasmc_trie_entry*  _trie_primary_level;
-_tasmc_trie_entry* _trie_second_level;
+extern _tasmc_trie_entry** _trie_table;
+extern _tasmc_trie_entry*  _trie_primary_level;
+extern _tasmc_trie_entry* _trie_second_level;
 
 // for shadow stack : 当函数参数为指针时，通过shadow stack 传递指针base和bound
 /*
@@ -65,8 +66,107 @@ _tasmc_trie_entry* _trie_second_level;
 *   ...   ...        
 ******************** <-- shadow_stack_space_begin 
 */
-void* _tasmc_shadow_stack_ptr;
-void* _tasmc_shadow_stack_curr_ptr;
-void* _tasmc_shadow_stack_space_begin;
+extern void* _shadow_stack_ptr;
+extern void* _shadow_stack_curr_ptr;
+extern void* _shadow_stack_space_begin;
 
+
+/**  
+ * pointerType: heap(000) stack(001) global(010) others(011)
+ * highter 3 bits of pointer(63~61bit)
+ * */
+size_t _f_getPoniterType(void* ptr){
+  
+}
+
+void* _f_setPointerType(void* ptr) {
+
+}
+
+/***
+ * pointerKey: 60~48 bit  total:13bits = 2^13
+ *      for heap: is  free_able_key
+ *      for stack: is func_id_num for checking memory of temporal errors.
+ *      for global: is ...
+ * */
+size_t _f_getPointerKey(void* ptr){
+
+}
+
+void* _f_setPointerKey(void* ptr) {
+
+}
+
+/***
+ * when operating pointer,such as ptr++, ptr-- ... 
+ * masking ptr with highter 16 bits.
+ * */
+void* _f_maskingPointer(void* ptr){
+
+}
+
+/**
+ *  assginment pointer.
+ *  propagation the pointer type, key, address.
+ *  the base and bound propagation by other function.
+ * */
+void* _f_assginmentPointer(void* ptr) {
+
+}
+
+
+
+//
+
+void* _f_loadBaseOfMetaData(void* ptr){
+
+}
+
+void* _f_storeBoundOfMetaBound(void* ptr){
+
+}
+
+
+//
+
+void* _f_loadBaseOfShadowStack(int args_no){
+
+}
+
+void* _f_storeBoundOfShadowStack(int args_no){
+
+}
+
+
+
+/**
+ * 
+ * 
+ * 
+ * */
+_tasmc_trie_entry* _f_trieEntryAllocate(){
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// this part implemented in tasmc.c
+void* _f_malloc(size_t size);
+void* _f_free(void* ptr);
 #endif
