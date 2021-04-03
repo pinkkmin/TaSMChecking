@@ -1,8 +1,9 @@
 # TaSMChecking
 
-temporal and spatial memory checking with runtime
+the Temporal and Spatial Memory Safety Checking For C at Runtime
 
 ```
+|- mess
 |- test
    |- add-function-from-lib
    |- identity-pointer

@@ -47,8 +47,21 @@ bool identityPointer::runOnModule(Module &m)  {
        errs()<<func->getName()<<"\n";
        for(Function::iterator bb = func->begin(); bb!=func->end();bb++) {
            for (BasicBlock::iterator inst = bb->begin(); inst != bb->end(); ++inst) {
-                // errs()<<inst-><<"  ";
-                errs()<<inst->getOpcodeName()<<"\n";
+                 Value* insn = dyn_cast<Value>(inst);
+                  if(isa<PointerType>(insn->getType())) {
+                      switch (inst->getOpcode())
+                      {
+                      case Instruction::Alloca:
+                            errs()<<"Yes!!!   ";
+                          /* code */
+                          break;
+                      
+                      default:
+                          break;
+                      }       
+                 errs()<<inst->getOpcodeName()<<"\n";
+                 }
+                
            }
        }
    }
