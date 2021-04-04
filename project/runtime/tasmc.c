@@ -73,3 +73,63 @@ void* _f_free(void* ptr){
 
   free(ptr);
 }
+
+
+// printf error message... ...
+void _f_callAbort(int type) {
+    fprintf(stderr, "\nTaSMChecking: Memory safety violation detected\n\nBacktrace:\n");
+
+    switch (type)
+    {
+    case ERROR_POINTER_TYPE:
+        printf(stderr, "abort: pointer type error... ... \n");
+        break;
+    case ERROR_POINTER_KEY:
+        printf(stderr, "abort: pointer key error... ... \n");
+        break; 
+    case ERROR_FREE_TABLE_USE_UP:
+        printf(stderr, "abort: free able table use up... ... \n");
+        break;
+    case ERROR_FREE_TABLE_CONFLICT:
+        printf(stderr, "abort: free able table insert key conflict... ... \n");
+        break;
+        
+    case ERROR_OF_SPATIAL:
+        printf(stderr, "abort: spatial error with check memory... ... \n");
+        break;
+    case ERROR_OF_TEMPORAL:
+        printf(stderr, "abort: temporal error with check memory... ... \n");
+        break;
+    case ERROR_POINTER_UNKNOW:
+    default:
+        printf(stderr, "abort: unknow error... ... \n");
+        break;
+    }
+
+    size_t size;
+    void *array[100];
+    size = backtrace(array, 100);
+    backtrace_symbols_fd(array, size, fileno(stderr));
+    fprintf(stderr, "\n\n");
+    abort();
+}
+
+void _f_printfPointerDebug(void* ptr) {
+
+    size_t value = (size_t)ptr;
+    size_t ptrType = _f_getPoniterType(ptr);
+    size_t ptrKey = _f_getPointerKey(ptr);
+    size_t ptrAddr = (size_t)_f_maskingPointer(ptr);
+
+    printf("ptr info: value = 0x%x,  ptrType = 0x%x, ptrKey = 0x%x, ptrAddr = 0x%x.\n", &value, &ptrType, &ptrKey, &ptrAddr);
+    printf("tips: ~ ( ty : 000:heap, 001:stack, 010:global, 011:others ) ! ! !\n\n");
+}
+
+void _f_tasmcPrintf(const char* str, ...)
+{
+  va_list args;
+  
+  va_start(args, str);
+  vfprintf(stderr, str, args);
+  va_end(args);
+}

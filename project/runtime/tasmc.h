@@ -14,7 +14,7 @@
 #include <math.h>
 #include "tasmcErrors.h"
 /*************** protocol of symbol******************
- * all const, var, func, define: 以下划线_开头
+ * all const, var, func, define: start by symbol"_"
  * define : 下划线分割，全部大写
  * func：下划线加驼峰 _f_checkingTemporalAndSpatital()
  * global：_g_ 
@@ -28,6 +28,16 @@
 #define POW_2_61_VALUE 2305843009213693952
 #define POW_2_60_VALUE 1152921504606846976
 #define POW_2_48_VALUE 281474976710656
+
+// invalid vlaue of pointer
+#define INVALID_PTR_KEY -1
+#define INVALID_PTR_BASE -1
+#define INVALID_PTR_BOUND -1 
+
+// pointer is free_able or free_unable. 
+#define PTR_FREE_ABLE 1
+#define PTR_FREE_UNABLE 0
+
 typedef struct 
 {
     /* data */
@@ -60,6 +70,11 @@ static const size_t _BITS_60_TO_48_NEG =  _BITS_63_TO_61_POS + POW_2_48_VALUE - 
 // masking highter 16bits.
 static const size_t _BITS_63_TO_48_MASK = POW_2_48_VALUE- 1; 
 
+// declare function
+void _f_tasmcPrintf(const char* str, ...);
+void _f_printfPointerDebug(void* ptr);
+void _f_callAbort(int type);
+
 // for trie table 
 extern _tasmc_trie_entry** _trie_table;
 extern _tasmc_trie_entry*  _trie_primary_level;
@@ -90,7 +105,6 @@ size_t ptrKeyCounter = 0; // loop allocate：ptrKey
 extern void* _shadow_stack_ptr;
 extern void* _shadow_stack_curr_ptr;
 // extern void* _shadow_stack_space_begin;
-
 
 /**  
  * pointerType: heap(000) stack(001) global(010) others(011)
@@ -143,9 +157,10 @@ void* _f_maskingPointer(void* ptr){
  *  propagation the pointer type, key, address.
  *  the base and bound propagation by other function.
  * */
-void* _f_assginmentPointer(void* ptr) {
-
-}
+// void _f_assginmentPointer(void* from, void* to) {
+//     size_t fromPtrKey = _f_getPointerKey(from);
+//     size_t fromPtrType = _f_getPoniterType(from);
+// }
 
 
 //
@@ -154,7 +169,7 @@ void* _f_loadBaseOfMetaData(void* ptr){
 
 }
 
-void* _f_storeBoundOfMetaBound(void* ptr){
+void* _f_storeBoundOfMetaData(void* ptr){
 
 }
 
@@ -170,6 +185,8 @@ void* _f_loadBaseOfShadowStack(int args_no){
 void* _f_storeBoundOfShadowStack(int args_no){
 
 }
+
+
 ////
 size_t _f_allocatePtrKey(){
 
@@ -192,15 +209,73 @@ size_t _f_allocatePtrKey(){
     }
     return ans;
 }
-void _f_addPtrToFreeTable(void* ptr) {
-     assert(ptr!= NULL);
-        
-     size_t ptrKey = _f_getPointerKey(ptr);
+
+// FAT: free able table
+size_t _f_getPtrFreeFlagFromFAT(size_t ptrKey) {
+    return *(_free_able_table + ptrKey);
+}
+
+void _f_setPtrFreeFlagToFAT(size_t ptrKey, size_t flag){
+    *(_free_able_table + ptrKey) = flag;
+}
+
+/** add a pointer to the free_able_table
+ *  allocate a ptr_key by pointerKeyCounter to the pointer
+ *  set the flag is PTR_FREE_ABLE
+ **/
+void _f_addPtrToFreeTable(size_t ptrKey) {
+
+    size_t flag = _f_getPtrFreeFlagFromFAT(ptrKey);
+
+    if(flag == PTR_FREE_ABLE) {
+        _f_tasmcPrintf("pointer key insert to free_able_talbe conflict.\n");
+        _f_callAbort(ERROR_FREE_TABLE_CONFLICT);
+    }
+
+    _f_setPtrFreeFlagToFAT(ptrKey, PTR_FREE_ABLE);
+}
+
+/** remove the pointer key from free_able_table
+ *  set the flag is PTR_FREE_UNABLE
+ **/
+void _f_removePtrFromFreeTable(void* ptr) {
+
+    assert(ptr!=NULL);
+    size_t ptrKey = _f_getPointerKey(ptr);
+    _f_setPtrFreeFlagToFAT(ptrKey, PTR_FREE_UNABLE);
+}
+
+/** ask: the pointer is free able?
+ *  return falg: able or unable
+ **/
+size_t _f_isFreeAbleOfPointer(void* ptr) {
+    size_t ptr_key = _f_getPointerKey(ptr);
+    size_t flag = *(_free_able_table + ptr_key);
+    if(flag ==PTR_FREE_ABLE) return flag;
+    return PTR_FREE_ABLE;
+}
+
+void _f_copyMetaData(void* dest, void* from){
 
 }
 
-void _f_removePtrFromFreeTable(void* ptr) {
-    assert(ptr!=NULL);
+void _f_copyPtrInfo(void* dest, void* from) {
+
+}
+// checking temporal and spatital， dereference
+void _f_checkSpatialLoadPtr(void* ptr, void* base, void* bound, size_t size){
+
+}
+
+void _f_checkSpatialStorePtr(void* ptr, void* base, void* bound, size_t size){
+
+}
+
+void _f_checkTemporalLoadPtr(void* ptr, void* base, void* bound, size_t size){
+
+}
+
+void _f_checkTemporalStorePtr(void* ptr, void* base, void* bound, size_t size) {
 
 }
 
@@ -209,44 +284,5 @@ _tasmc_trie_entry* _allocateSecondaryTrieRange();
 void * __f_safe_mmap(void* addr, size_t length, int prot, int flags, int fd, off_t offset);
 void* _f_malloc(size_t size);
 void* _f_free(void* ptr);
+
 #endif
-
-// printf error message... ...
-void _f_callAbort(int type) {
-    fprintf(stderr, "\nTaSMChecking: Memory safety violation detected\n\nBacktrace:\n");
-
-    switch (type)
-    {
-    case ERROR_POINTER_TYPE:
-        printf(stderr, "abort: pointer type error... ... \n");
-        break;
-    case ERROR_POINTER_KEY:
-        printf(stderr, "abort: pointer key error... ... \n");
-        break; 
-    case ERROR_FREE_TABLE_USE_UP:
-        printf(stderr, "abort: free able table use up... ... \n");
-        break;
-    case ERROR_POINTER_UNKNOW:
-    default:
-        printf(stderr, "abort: unknow error... ... \n");
-        break;
-    }
-
-    size_t size;
-    void *array[100];
-    size = backtrace(array, 100);
-    backtrace_symbols_fd(array, size, fileno(stderr));
-    fprintf(stderr, "\n\n");
-    abort();
-}
-
-void _f_printfPointerDebug(void* ptr) {
-
-    size_t value = (size_t)ptr;
-    size_t ptrType = _f_getPoniterType(ptr);
-    size_t ptrKey = _f_getPointerKey(ptr);
-    size_t ptrAddr = (size_t)_f_maskingPointer(ptr);
-
-    printf("ptr info: value = 0x%x,  ptrType = 0x%x, ptrKey = 0x%x, ptrAddr = 0x%x.\n", &value, &ptrType, &ptrKey, &ptrAddr);
-    printf("tips: ~ ( ty : 000:heap, 001:stack, 010:global, 011:others ) ! ! !\n\n");
-}
