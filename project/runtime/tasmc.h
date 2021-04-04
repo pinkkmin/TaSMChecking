@@ -23,7 +23,11 @@
  *****************************************************/
 
 #define TaSMC_MMAP_FLAGS (MAP_PRIVATE|MAP_ANONYMOUS|MAP_NORESERVE)
-
+#define POW_2_63_VALUE 9223372036854775808
+#define POW_2_62_VALUE 4611686018427387904
+#define POW_2_61_VALUE 2305843009213693952
+#define POW_2_60_VALUE 1152921504606846976
+#define POW_2_48_VALUE 281474976710656
 typedef struct 
 {
     /* data */
@@ -35,7 +39,8 @@ typedef struct
 } _tasmc_trie_entry;
 
 //static const 
-static const int _SHADOW_STACK_N_ENTRIES = ((size_t) 128 * (size_t) 32 );; // shadow stack大小，还需要乘上sizeof（void*）
+static const size_t _FREE_ABLE_TABLE_N_KEY = ((size_t)1024 * (size_t) 8); // 2^13 ptr key
+static const int _SHADOW_STACK_N_ENTRIES = ((size_t) 128 * (size_t) 32 ); // shadow stack大小，还需要乘上sizeof（void*）
 //trie primary level: 2^23
 static const size_t _TRIE_PRIMARY_TABLE_N_ENTRIES = ((size_t) 8 * (size_t) 1024 * (size_t) 1024);  
 //trie second level: 2^22
@@ -45,21 +50,24 @@ static const size_t _BITS_OF_SIZET = sizeof(size_t)*8;
 static const size_t _ALIGN_BYTE_LOWER_BITS = 3; //低位3位字节对齐
 
 //最高位为0 次高两位为 全1 或全0 （其他位相反）
-static const size_t _BITS_63_TO_61_POS =  pow(2,63) - pow(2, 61) ; // POS = 1 
-static const size_t _BITS_63_TO_61_NEG =  pow(2, 62) - 1; // NEG = 0
+static const size_t _BITS_63_TO_61_POS =  POW_2_63_VALUE - POW_2_61_VALUE ; // POS = 1 
+static const size_t _BITS_63_TO_61_NEG =  POW_2_62_VALUE - 1; // NEG = 0
 
 // pointer key (13bits)
-static const size_t _BITS_60_TO_48_POS =  pow(2,63) - pow(2, 61); 
-static const size_t _BITS_60_TO_48_NEG =  _BITS_63_TO_61_POS + pow(2, 48) - 1;
+static const size_t _BITS_60_TO_48_POS =  POW_2_60_VALUE - POW_2_48_VALUE; 
+static const size_t _BITS_60_TO_48_NEG =  _BITS_63_TO_61_POS + POW_2_48_VALUE - 1;
 
 // masking highter 16bits.
-static const size_t _BITS_63_TO_48_MASK = pow(2, 48) - 1; 
+static const size_t _BITS_63_TO_48_MASK = POW_2_48_VALUE- 1; 
 
 // for trie table 
 extern _tasmc_trie_entry** _trie_table;
 extern _tasmc_trie_entry*  _trie_primary_level;
 extern _tasmc_trie_entry* _trie_second_level;
 
+// for free able table
+extern size_t* _free_able_table;
+size_t ptrKeyCounter = 0; // loop allocate：ptrKey
 // for shadow stack : 当函数参数为指针时，通过shadow stack 传递指针base和bound
 /*
 ******************
@@ -81,7 +89,7 @@ extern _tasmc_trie_entry* _trie_second_level;
 */
 extern void* _shadow_stack_ptr;
 extern void* _shadow_stack_curr_ptr;
-extern void* _shadow_stack_space_begin;
+// extern void* _shadow_stack_space_begin;
 
 
 /**  
@@ -150,7 +158,9 @@ void* _f_storeBoundOfMetaBound(void* ptr){
 
 }
 
+void _f_dellocatePointer(void* ptr) {
 
+}
 //
 
 void* _f_loadBaseOfShadowStack(int args_no){
@@ -160,10 +170,43 @@ void* _f_loadBaseOfShadowStack(int args_no){
 void* _f_storeBoundOfShadowStack(int args_no){
 
 }
+////
+size_t _f_allocatePtrKey(){
 
+    size_t isUse = *(_free_able_table + ptrKeyCounter);
+    size_t ans = -1;
+    if(isUse != 1) {
+      ans = ptrKeyCounter++;
+      ptrKeyCounter %= (_FREE_ABLE_TABLE_N_KEY-1);
+    }else {
+        for( size_t index = 0; index < _FREE_ABLE_TABLE_N_KEY; ++index) {
+            if(*(_free_able_table + index) != 1) {
+                ptrKeyCounter = index+1;
+                return index;
+            }
+        }
+    }
+    if(ans ==-1) {
+        _f_callAbort(ERROR_FREE_TABLE_USE_UP);
+        return  0;
+    }
+    return ans;
+}
+void _f_addPtrToFreeTable(void* ptr) {
+     assert(ptr!= NULL);
+        
+     size_t ptrKey = _f_getPointerKey(ptr);
+
+}
+
+void _f_removePtrFromFreeTable(void* ptr) {
+    assert(ptr!=NULL);
+
+}
 
 // this part implemented in tasmc.c
 _tasmc_trie_entry* _allocateSecondaryTrieRange();
+void * __f_safe_mmap(void* addr, size_t length, int prot, int flags, int fd, off_t offset);
 void* _f_malloc(size_t size);
 void* _f_free(void* ptr);
 #endif
@@ -180,6 +223,9 @@ void _f_callAbort(int type) {
     case ERROR_POINTER_KEY:
         printf(stderr, "abort: pointer key error... ... \n");
         break; 
+    case ERROR_FREE_TABLE_USE_UP:
+        printf(stderr, "abort: free able table use up... ... \n");
+        break;
     case ERROR_POINTER_UNKNOW:
     default:
         printf(stderr, "abort: unknow error... ... \n");
@@ -194,3 +240,13 @@ void _f_callAbort(int type) {
     abort();
 }
 
+void _f_printfPointerDebug(void* ptr) {
+
+    size_t value = (size_t)ptr;
+    size_t ptrType = _f_getPoniterType(ptr);
+    size_t ptrKey = _f_getPointerKey(ptr);
+    size_t ptrAddr = (size_t)_f_maskingPointer(ptr);
+
+    printf("ptr info: value = 0x%x,  ptrType = 0x%x, ptrKey = 0x%x, ptrAddr = 0x%x.\n", &value, &ptrType, &ptrKey, &ptrAddr);
+    printf("tips: ~ ( ty : 000:heap, 001:stack, 010:global, 011:others ) ! ! !\n\n");
+}
