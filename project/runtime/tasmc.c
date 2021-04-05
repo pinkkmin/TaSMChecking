@@ -1,3 +1,9 @@
+/**
+ * @author: mingfu(silence.pink) @NUAA.
+ * @Date: 2021-04-01
+ * Copyright (c) 2021 mingfu. All rights reserved.
+ * */
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <assert.h>
@@ -9,6 +15,17 @@
 #include <execinfo.h>
 
 #include "tasmc.h"
+
+/********************** about pointer **************************
+ *    -------addr_of_ptr-------------
+ *    | 63 ~ 48 | 47  ~ 22 | 21 ~ 0 |                 
+ *    -------------------------------
+ *    hight 16bits + primary level(2^23) + second level(2^22)
+ *    -------value_of_ptr-----------
+ *    | 63 ~ 61 | 60 ~ 48 | 47 ~ 0 |
+ *    -----------------------------
+ *    type(3bits) + key(13bits) + real_value_of_ptr(48bits)
+ * *************************************************************/
 
 
 // for trie table
@@ -140,4 +157,13 @@ void _f_tasmcPrintf(const char* str, ...)
   va_start(args, str);
   vfprintf(stderr, str, args);
   va_end(args);
+}
+
+// pseudo main from TaSMCPass.
+// called by rumtime library main() function
+extern int _f_pseudoMain(int argc, char **argv);
+
+int main(int argc, char **argv){
+
+  return 0;
 }

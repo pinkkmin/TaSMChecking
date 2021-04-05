@@ -1,3 +1,9 @@
+/**
+ * @author: mingfu(silence.pink) @NUAA.
+ * @Date: 2021-04-01
+ * Copyright (c) 2021 mingfu. All rights reserved.
+ * */
+
 #ifndef __TASMC_H__
 #define __TASMC_H__
 
@@ -13,6 +19,7 @@
 #include <assert.h>
 #include <math.h>
 #include "tasmcErrors.h"
+
 /*************** protocol of symbol******************
  * all const, var, func, define: start by symbol"_"
  * define : 下划线分割，全部大写
@@ -22,6 +29,9 @@
  * 局部： 随意 最好不要乱起
  * tips: void*表示任意传参
  *****************************************************/
+
+/// DEBUG FOR TaSMC
+#define TaSMC_DEBUG_FLAG 0
 
 #define TaSMC_MMAP_FLAGS (MAP_PRIVATE|MAP_ANONYMOUS|MAP_NORESERVE)
 
@@ -58,7 +68,7 @@ static const size_t _ALIGN_BYTE_LOWER_BITS = 3; //低位3位字节对齐
 // 63 ~~~ 0: highter bit no use
 // 63~61: pointer type
 // 60~48：pointer key
-// 47~0 ：pointer address
+// 47~0 ：pointer value (point to obejct)
 //最高位为0 次高两位为 全1 或全0 （其他位相反）
 static const size_t _BITS_62_TO_61_POS =  0x6000000000000000; // POS = 1 
 static const size_t _BITS_62_TO_61_NEG =  0x1FFFFFFFFFFFFFFF; // NEG = 0
@@ -162,16 +172,6 @@ void* _f_maskingPointer(void* ptr){
     return (void*)value;
 }
 
-/**
- *  ALU pointer.
- *  propagation the pointer type, key, address.
- *  the base and bound propagation by other function.
- * */
-void _f_assginmentPointer(void* from, void* to) {
-    size_t fromPtrKey = _f_getPointerKey(from);
-    size_t fromPtrType = _f_getPoniterType(from);
-}
-
 // remember pass &pointer to parameter
 // and the sizeof(*ptr)
 void* _f_incPointerAddr(void* addr_of_ptr, size_t index , size_t ptr_size){
@@ -179,7 +179,6 @@ void* _f_incPointerAddr(void* addr_of_ptr, size_t index , size_t ptr_size){
     void* ptr = *((void**)addr_of_ptr);
     void* realAddr = _f_maskingPointer(ptr);
     realAddr += index * ptr_size;
-    size_t key = _f_
     *((void**)addr_of_ptr) = (void*)realAddr;
 }
 
@@ -193,29 +192,34 @@ void _f_decPointerAddr(void* addr_of_ptr, size_t index, size_t ptr_size) {
 }
 
 // load(store) base(bound) from metadata 
-void* _f_loadBaseOfMetaData(void* ptr){
-    size_t metaAddr =   _f_maskingPointer(ptr);
-    _tasmc_trie_entry* entry = (_tasmc_trie_entry*)metaAddr;
+void* _f_loadBaseOfMetaData(void* addr_of_ptr){
+    _tasmc_trie_entry* entry = (_tasmc_trie_entry*)addr_of_ptr;
     return entry->base;
 }
 
-void* _f_loadBoundOfMetadata(void* ptr) {
-     size_t metaAddr =   _f_maskingPointer(ptr);
-    _tasmc_trie_entry* entry = (_tasmc_trie_entry*)metaAddr;
+void* _f_loadBoundOfMetadata(void* addr_of_ptr) {
+    _tasmc_trie_entry* entry = (_tasmc_trie_entry*)addr_of_ptr;
     return entry->bound;
 }
 
-void _f_storeMetaData(void* ptr, void* base, void* bound){
-    size_t ptrAddr = _f_maskingPointer(ptr);
-    size_t primayIndex;
+void _f_storeMetaData(void* addr_of_ptr, void* base, void* bound){
+
+    size_t addr = (size_t)addr_of_ptr;
+    size_t primayIndex,secondIndex;
     _tasmc_trie_entry* secondLevelTrie;
-    primayIndex = (ptrAddr>>25);
+    primayIndex = (addr>>25);
+    secondIndex = (addr>>3) &0x3FFFFF;
     secondLevelTrie = _trie_table[primayIndex];
     if(secondLevelTrie == NULL) {
         secondLevelTrie = _f_trie_allocate();
+        _trie_table[primayIndex] = secondLevelTrie;
     }
-} 
 
+    _tasmc_trie_entry* entry = &secondLevelTrie[secondIndex];
+
+    entry->base = base;
+    entry->bound = bound;
+} 
 
 void _f_deallocatePointer(void* ptr) {
 
@@ -336,33 +340,54 @@ size_t _f_isFreeAbleOfPointer(void* ptr) {
 }
 
 // propagation pointer metadata, key, type.
-void _f_copyMetaData(void* from, void* dest){
-
-    size_t fromAddr = _f_maskingPointer(from);
-    size_t fromType = _f_getPointerKey(from);
-    size_t fromKey  = _f_getPoniterType(from);
-
-
+void _f_copyMetaData(void* addr_of_from, void* addr_of_dest){
+    size_t from = (size_t)addr_of_from;
+    size_t dest = (size_t)addr_of_dest;
+    // PS: 处理 字节不对齐情况
 }
 
-void _f_copyPtrInfo(void* from, void* dest) {
-
-}
 // checking temporal and spatital， dereference
 void _f_checkSpatialLoadPtr(void* ptr, void* base, void* bound, size_t size){
 
+    void* addr = _f_maskingPointer(ptr);
+    if ((addr < base) || ((void*)(addr + size) > bound)) {
+        _f_tasmcPrintf("In  Load Dereference Checking, base=%zx, bound=%zx, ptr=%zx\n",
+    			   base, bound, ptr);  
+                   _f_callAbort(ERROR_OF_SPATIAL_LDC);
+    }
 }
 
 void _f_checkSpatialStorePtr(void* ptr, void* base, void* bound, size_t size){
 
+    void* addr = _f_maskingPointer(ptr);
+    if ((addr < base) || ((void*)(addr + size) > bound)) {
+        _f_tasmcPrintf("In  Store Dereference Checking, base=%zx, bound=%zx, ptr=%zx\n",
+    			   base, bound, ptr);  
+                   _f_callAbort(ERROR_OF_SPATIAL_SDC);
+    }
+
 }
 
-void _f_checkTemporalLoadPtr(void* ptr, void* base, void* bound, size_t size){
+void _f_checkTemporalLoadPtr(void* ptr){
 
+   size_t flag =  _f_isFreeAbleOfPointer(ptr);
+    size_t key = _f_getPointerKey(key);
+
+    if(flag != PTR_FREE_ABLE) {
+        _f_tasmcPrintf("temporal load check, invalid pointer key. key = %zx,ptr =%zx\n", key, ptr);
+        _f_callAbort(ERROR_OF_TEMPORAL_LDC);  
+    }
 }
 
-void _f_checkTemporalStorePtr(void* ptr, void* base, void* bound, size_t size) {
+void _f_checkTemporalStorePtr(void* ptr) {
 
+    size_t flag =  _f_isFreeAbleOfPointer(ptr);
+    size_t key = _f_getPointerKey(key);
+
+    if(flag != PTR_FREE_ABLE) {
+       _f_tasmcPrintf("temporal store check, invalid pointer key. key = %zx,ptr =%zx\n", key,ptr);
+     _f_callAbort(ERROR_OF_TEMPORAL_SDC);  
+    }
 }
 
 // this part implemented in tasmc.c
