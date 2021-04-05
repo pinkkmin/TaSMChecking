@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "*.asm": "mips",
+        "*.o": "c",
+        "iostream": "cpp",
+        "ostream": "cpp"
+    }
+}

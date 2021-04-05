@@ -21,7 +21,6 @@ size_t* _free_able_table;
 
 // for shadow stack
 void* _shadow_stack_ptr = NULL;
-void* _shadow_stack_curr_ptr = NULL;
 // void* _shadow_stack_space_begin = NULL;
 
 /** init memory for tasmc.
@@ -52,11 +51,20 @@ void _initTaSMC(){
   *((size_t*)_shadow_stack_curr_ptr) = 0;
 }
 
-_tasmc_trie_entry* _allocateSecondaryTrieRange(){
+_tasmc_trie_entry* _f_trie_allocate(){
+  _tasmc_trie_entry* secondLevel = NULL;
+  size_t length = (_TRIE_SECONDARY_TABLE_N_ENTRIES) * sizeof(_tasmc_trie_entry);
+  secondLevel = __softboundcets_safe_mmap(0, length, PROT_READ| PROT_WRITE, 
+					      TaSMC_MMAP_FLAGS, -1, 0);
+
+  assert(secondLevel != (void*)-1); 
+  return secondLevel;
+}
+_tasmc_trie_entry* _f_allocateSecondaryTrieRange(){
 
 }
 
-void * __f_safe_mmap(void* addr, 
+void * _f_safe_mmap(void* addr, 
                      size_t length,int prot, 
                      int flags,int fd, 
                      off_t offset){

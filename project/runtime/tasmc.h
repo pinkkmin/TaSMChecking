@@ -20,14 +20,10 @@
  * global：_g_ 
  * const：全部大写加下划线
  * 局部： 随意 最好不要乱起
+ * tips: void*表示任意传参
  *****************************************************/
 
 #define TaSMC_MMAP_FLAGS (MAP_PRIVATE|MAP_ANONYMOUS|MAP_NORESERVE)
-#define POW_2_63_VALUE 9223372036854775808
-#define POW_2_62_VALUE 4611686018427387904
-#define POW_2_61_VALUE 2305843009213693952
-#define POW_2_60_VALUE 1152921504606846976
-#define POW_2_48_VALUE 281474976710656
 
 // invalid vlaue of pointer
 #define INVALID_PTR_KEY -1
@@ -59,16 +55,20 @@ static const size_t _TRIE_SECONDARY_TABLE_N_ENTRIES = ((size_t) 4 * (size_t) 102
 static const size_t _BITS_OF_SIZET = sizeof(size_t)*8;
 static const size_t _ALIGN_BYTE_LOWER_BITS = 3; //低位3位字节对齐
 
+// 63 ~~~ 0: highter bit no use
+// 63~61: pointer type
+// 60~48：pointer key
+// 47~0 ：pointer address
 //最高位为0 次高两位为 全1 或全0 （其他位相反）
-static const size_t _BITS_63_TO_61_POS =  POW_2_63_VALUE - POW_2_61_VALUE ; // POS = 1 
-static const size_t _BITS_63_TO_61_NEG =  POW_2_62_VALUE - 1; // NEG = 0
+static const size_t _BITS_62_TO_61_POS =  0x6000000000000000; // POS = 1 
+static const size_t _BITS_62_TO_61_NEG =  0x1FFFFFFFFFFFFFFF; // NEG = 0
 
 // pointer key (13bits)
-static const size_t _BITS_60_TO_48_POS =  POW_2_60_VALUE - POW_2_48_VALUE; 
-static const size_t _BITS_60_TO_48_NEG =  _BITS_63_TO_61_POS + POW_2_48_VALUE - 1;
+static const size_t _BITS_60_TO_48_POS =  0x1FFF000000000000; 
+static const size_t _BITS_60_TO_48_NEG =  0x6000FFFFFFFFFFFF;
 
 // masking highter 16bits.
-static const size_t _BITS_63_TO_48_MASK = POW_2_48_VALUE- 1; 
+static const size_t _BITS_63_TO_48_MASK = 0xFFFFFF; 
 
 // declare function
 void _f_tasmcPrintf(const char* str, ...);
@@ -103,7 +103,6 @@ size_t ptrKeyCounter = 0; // loop allocate：ptrKey
 ******************** <-- shadow_stack_space_begin 
 */
 extern void* _shadow_stack_ptr;
-extern void* _shadow_stack_curr_ptr;
 // extern void* _shadow_stack_space_begin;
 
 /**  
@@ -114,15 +113,23 @@ size_t _f_getPoniterType(void* ptr){
     size_t value = (size_t)ptr;
     size_t ty = value>>(_BITS_OF_SIZET-3);
     ty = ty&7;
+
     if(ty > 3) _f_callAbort(ERROR_POINTER_TYPE);
+
     return ty;
 }
 
-void* _f_setPointerType(void* ptr, size_t type){
-    size_t value = (size_t)ptr & _BITS_63_TO_61_NEG;
+/** remember pass &pointer to ptr
+ *  like: int *p = new int;
+ *        _f_setPointerType( &p, 12);
+ * */
+void _f_setPointerType(void* addr_of_ptr, size_t type){
+
+    size_t value = **((size_t**)addr_of_ptr) & _BITS_62_TO_61_NEG;
     type = type <<(_BITS_OF_SIZET-3);
     value = value | type;
-    return (void*)value;
+
+    *((void**)addr_of_ptr) = (void*)value;
 }
 
 /***
@@ -132,15 +139,18 @@ void* _f_setPointerType(void* ptr, size_t type){
  *      for global: is ...
  * */
 size_t _f_getPointerKey(void* ptr){
-    size_t value = (size_t)ptr & _BITS_63_TO_61_NEG;
+    size_t value = (size_t)ptr & _BITS_60_TO_48_POS;
     value = value >> (_BITS_OF_SIZET-16);
     return value;
 }
 
-void* _f_setPointerKey(void* ptr, size_t key) {
-    size_t value = (size_t)ptr & _BITS_60_TO_48_NEG;
-    value = value | (key<<(_BITS_OF_SIZET)-16);
-    return (void*)value;
+// remember pass &pointer to ptr
+void _f_setPointerKey(void* addr_of_ptr, size_t key) {
+
+    size_t value = **((size_t**)addr_of_ptr)  & _BITS_60_TO_48_NEG;
+    value = value | (key<<(_BITS_OF_SIZET-16));
+
+    *((void**)addr_of_ptr) = (void*)value;
 }
 
 /***
@@ -153,39 +163,109 @@ void* _f_maskingPointer(void* ptr){
 }
 
 /**
- *  assginment pointer.
+ *  ALU pointer.
  *  propagation the pointer type, key, address.
  *  the base and bound propagation by other function.
  * */
-// void _f_assginmentPointer(void* from, void* to) {
-//     size_t fromPtrKey = _f_getPointerKey(from);
-//     size_t fromPtrType = _f_getPoniterType(from);
-// }
+void _f_assginmentPointer(void* from, void* to) {
+    size_t fromPtrKey = _f_getPointerKey(from);
+    size_t fromPtrType = _f_getPoniterType(from);
+}
 
+// remember pass &pointer to parameter
+// and the sizeof(*ptr)
+void* _f_incPointerAddr(void* addr_of_ptr, size_t index , size_t ptr_size){
 
-//
+    void* ptr = *((void**)addr_of_ptr);
+    void* realAddr = _f_maskingPointer(ptr);
+    realAddr += index * ptr_size;
+    size_t key = _f_
+    *((void**)addr_of_ptr) = (void*)realAddr;
+}
 
+// remember pass &pointer to parameter
+void _f_decPointerAddr(void* addr_of_ptr, size_t index, size_t ptr_size) {
+
+    void* ptr = *((void**)addr_of_ptr);
+    void* realAddr = _f_maskingPointer(ptr);
+    realAddr -= index * ptr_size;
+    *((void**)addr_of_ptr) = (void*)realAddr;
+}
+
+// load(store) base(bound) from metadata 
 void* _f_loadBaseOfMetaData(void* ptr){
+    size_t metaAddr =   _f_maskingPointer(ptr);
+    _tasmc_trie_entry* entry = (_tasmc_trie_entry*)metaAddr;
+    return entry->base;
+}
+
+void* _f_loadBoundOfMetadata(void* ptr) {
+     size_t metaAddr =   _f_maskingPointer(ptr);
+    _tasmc_trie_entry* entry = (_tasmc_trie_entry*)metaAddr;
+    return entry->bound;
+}
+
+void _f_storeMetaData(void* ptr, void* base, void* bound){
+    size_t ptrAddr = _f_maskingPointer(ptr);
+    size_t primayIndex;
+    _tasmc_trie_entry* secondLevelTrie;
+    primayIndex = (ptrAddr>>25);
+    secondLevelTrie = _trie_table[primayIndex];
+    if(secondLevelTrie == NULL) {
+        secondLevelTrie = _f_trie_allocate();
+    }
+} 
+
+
+void _f_deallocatePointer(void* ptr) {
 
 }
 
-void* _f_storeBoundOfMetaData(void* ptr){
 
-}
-
-void _f_dellocatePointer(void* ptr) {
-
-}
-//
-
+//load(store) base(bound) from shadow stack
 void* _f_loadBaseOfShadowStack(int args_no){
 
+    assert(args_no >= 0);
+
+    size_t index = _BASE_INDEX + args_no * _METADATA_NUM_FIELDS + 2;
+    size_t* base = _shadow_stack_ptr + index; 
+
+    return base;
 }
 
 void* _f_storeBoundOfShadowStack(int args_no){
 
+     assert(args_no >= 0);
+
+     size_t index = _BOUND_INDEX + args_no * _METADATA_NUM_FIELDS + 2;
+     size_t bound = _shadow_stack_ptr + index;
+
+     return bound;
 }
 
+// allocate(dellocate) meataData from shadow stack
+void _f_allocateShadowStackMetadata(size_t args_no){
+
+    size_t* preStackSizePtr = _shadow_stack_ptr + 1;
+    size_t preStackSize = *((size_t*)preStackSizePtr);
+
+    _shadow_stack_ptr += (2 + preStackSize);
+    *((size_t*)_shadow_stack_ptr) =  preStackSize;
+
+     size_t* _shadow_stack_curr_ptr = _shadow_stack_ptr + 1;
+     size_t size = args_no * _METADATA_NUM_FIELDS ;
+
+     *(_shadow_stack_curr_ptr) = size;
+}
+void _f_deallocateShadowStackMetaData(){
+
+    size_t* resStackPtr = _shadow_stack_ptr;
+    size_t resStackSize = *((size_t*)resStackPtr);
+
+    assert((resStackSize >=0 && resStackSize <= _SHADOW_STACK_N_ENTRIES));
+
+    _shadow_stack_ptr -= (2 + resStackSize);
+}
 
 ////
 size_t _f_allocatePtrKey(){
@@ -255,11 +335,17 @@ size_t _f_isFreeAbleOfPointer(void* ptr) {
     return PTR_FREE_ABLE;
 }
 
-void _f_copyMetaData(void* dest, void* from){
+// propagation pointer metadata, key, type.
+void _f_copyMetaData(void* from, void* dest){
+
+    size_t fromAddr = _f_maskingPointer(from);
+    size_t fromType = _f_getPointerKey(from);
+    size_t fromKey  = _f_getPoniterType(from);
+
 
 }
 
-void _f_copyPtrInfo(void* dest, void* from) {
+void _f_copyPtrInfo(void* from, void* dest) {
 
 }
 // checking temporal and spatital， dereference
@@ -280,8 +366,9 @@ void _f_checkTemporalStorePtr(void* ptr, void* base, void* bound, size_t size) {
 }
 
 // this part implemented in tasmc.c
-_tasmc_trie_entry* _allocateSecondaryTrieRange();
-void * __f_safe_mmap(void* addr, size_t length, int prot, int flags, int fd, off_t offset);
+_tasmc_trie_entry* _f_trie_allocate();
+_tasmc_trie_entry* _f_allocateSecondaryTrieRange();
+void * _f_safe_mmap(void* addr, size_t length, int prot, int flags, int fd, off_t offset);
 void* _f_malloc(size_t size);
 void* _f_free(void* ptr);
 
