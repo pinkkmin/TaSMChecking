@@ -1,0 +1,2 @@
+/usr/bin/ar qc /root/TaSMChecking/project/libtasmc_rt.a  CMakeFiles/tasmc_rt.dir/tasmc.c.o
+/usr/bin/ranlib /root/TaSMChecking/project/libtasmc_rt.a

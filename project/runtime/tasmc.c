@@ -51,6 +51,9 @@ void _initTaSMC(){
 					    TaSMC_MMAP_FLAGS, -1, 0);
   assert(_trie_primary_level != (void *)-1);  
 
+  int* temp = malloc(1);
+  _f_allocateSecondaryTrieRange(0, (size_t)temp);
+
   size_t freeTableLength = _FREE_ABLE_TABLE_N_KEY * sizeof(void*);
     _free_able_table = mmap(0, freeTableLength, 
 					    PROT_READ| PROT_WRITE, 
@@ -64,8 +67,15 @@ void _initTaSMC(){
   assert(_shadow_stack_ptr != (void *)-1); 
   
   *((size_t*)_shadow_stack_ptr) = 0;
-  _shadow_stack_curr_ptr = _shadow_stack_ptr + 1 ;
+
+  size_t* _shadow_stack_curr_ptr = _shadow_stack_ptr + 1 ;
   *((size_t*)_shadow_stack_curr_ptr) = 0;
+
+  size_t freeMapLength = _FREE_ABLE_TABLE_N_KEY * sizeof(size_t);
+  _free_able_table = mmap(0, freeMapLength, 
+                                          PROT_READ| PROT_WRITE, 
+                                          TaSMC_MMAP_FLAGS, -1, 0);
+    assert(_free_able_table != (void*) -1);
 }
 
 _tasmc_trie_entry* _f_trie_allocate(){
@@ -75,13 +85,11 @@ _tasmc_trie_entry* _f_trie_allocate(){
 					      TaSMC_MMAP_FLAGS, -1, 0);
 
   assert(secondLevel != (void*)-1); 
-  return secondLevel;
-}
-_tasmc_trie_entry* _f_allocateSecondaryTrieRange(){
-
+  
+  return (_tasmc_trie_entry*)secondLevel;
 }
 
-void * _f_safe_mmap(void* addr, 
+void* _f_safe_mmap(void* addr, 
                      size_t length,int prot, 
                      int flags,int fd, 
                      off_t offset){
@@ -94,7 +102,7 @@ void* _f_malloc(size_t size){
   return malloc(size);
 }
 
-void* _f_free(void* ptr){
+void _f_free(void* ptr){
 
   free(ptr);
 }
@@ -165,5 +173,11 @@ extern int _f_pseudoMain(int argc, char **argv);
 
 int main(int argc, char **argv){
 
+  #if __WORDSIZE == 32
+  exit(1);
+  #endif
+  int retValue;
+  char** new_argv = argv;
+  retValue = softboundcets_pseudo_main(argc, new_argv);
   return 0;
 }

@@ -115,6 +115,13 @@ size_t ptrKeyCounter = 0; // loop allocate：ptrKey
 extern void* _shadow_stack_ptr;
 // extern void* _shadow_stack_space_begin;
 
+// this part implemented in tasmc.c
+_tasmc_trie_entry* _f_trie_allocate();
+void* _f_safe_mmap(void* addr, size_t length, int prot, int flags, int fd, off_t offset);
+void* _f_malloc(size_t size);
+void _f_free(void* ptr);
+
+
 /**  
  * pointerType: heap(000) stack(001) global(010) others(011)
  * highter 3 bits of pointer(63~61bit)
@@ -174,7 +181,7 @@ void* _f_maskingPointer(void* ptr){
 
 // remember pass &pointer to parameter
 // and the sizeof(*ptr)
-void* _f_incPointerAddr(void* addr_of_ptr, size_t index , size_t ptr_size){
+void _f_incPointerAddr(void* addr_of_ptr, size_t index , size_t ptr_size){
 
     void* ptr = *((void**)addr_of_ptr);
     void* realAddr = _f_maskingPointer(ptr);
@@ -390,11 +397,23 @@ void _f_checkTemporalStorePtr(void* ptr) {
     }
 }
 
-// this part implemented in tasmc.c
-_tasmc_trie_entry* _f_trie_allocate();
-_tasmc_trie_entry* _f_allocateSecondaryTrieRange();
-void * _f_safe_mmap(void* addr, size_t length, int prot, int flags, int fd, off_t offset);
-void* _f_malloc(size_t size);
-void* _f_free(void* ptr);
+// allocate second level trie range
+void _f_allocateSecondaryTrieRange(void* start, size_t size){
 
+  size_t startAddr = (size_t)start;
+  size_t ednAddr = (size_t)((void*)(start + size));
+  size_t primaryStart = startAddr >> 25;
+  size_t primaryEnd = ednAddr >> 25;
+
+  while (primaryStart <= primaryEnd)
+  {
+      _tasmc_trie_entry* secondlevelTrie = _trie_table[primaryStart];
+      if(secondlevelTrie == NULL) {
+          secondlevelTrie = _f_trie_allocate();
+          _trie_table[primaryStart] = secondlevelTrie;
+      }
+      primaryStart ++;
+  }
+  
+}
 #endif
