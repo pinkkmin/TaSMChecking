@@ -1,6 +1,6 @@
 # TaSMChecking
 
-the Temporal and Spatial Memory Safety Checking For C at Runtime
+The Temporal and Spatial Memory Safety Checking For C at Runtime.
 
 ```
 |- mess

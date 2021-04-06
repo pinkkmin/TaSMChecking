@@ -169,7 +169,7 @@ void _f_tasmcPrintf(const char* str, ...)
   va_start(args, str);
   vfprintf(stderr, str, args);
   va_end(args);
-}
+} 
 
 // pseudo main from TaSMCPass.
 // called by rumtime library main() function

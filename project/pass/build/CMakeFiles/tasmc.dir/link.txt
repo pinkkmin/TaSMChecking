@@ -1,0 +1,1 @@
+/usr/bin/c++ -fPIC -g  -shared -Wl,-soname,libtasmc.so -o /root/TaSMChecking/project/libtasmc.so CMakeFiles/tasmc.dir/tasmChecking.cpp.o 

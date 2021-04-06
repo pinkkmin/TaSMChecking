@@ -1,0 +1,7 @@
+[
+{
+  "directory": "/root/TaSMChecking/project/pass/build",
+  "command": "/usr/bin/c++  -Dtasmc_EXPORTS -I/root/TaSMChecking/project/pass/build  -g -fPIC   -fno-rtti -o CMakeFiles/tasmc.dir/tasmChecking.cpp.o -c /root/TaSMChecking/project/pass/tasmChecking.cpp",
+  "file": "/root/TaSMChecking/project/pass/tasmChecking.cpp"
+}
+]
