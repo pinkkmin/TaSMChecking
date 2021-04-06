@@ -78,7 +78,7 @@ static const size_t _BITS_60_TO_48_POS =  0x1FFF000000000000;
 static const size_t _BITS_60_TO_48_NEG =  0x6000FFFFFFFFFFFF;
 
 // masking highter 16bits.
-static const size_t _BITS_63_TO_48_MASK = 0xFFFFFF; 
+static const size_t _BITS_63_TO_48_MASK = 0xFFFFFFFFFFFF; 
 
 // declare function
 void _f_tasmcPrintf(const char* str, ...);
@@ -115,6 +115,9 @@ size_t ptrKeyCounter = 0; // loop allocate：ptrKey
 extern void* _shadow_stack_ptr;
 // extern void* _shadow_stack_space_begin;
 
+// ***************** declaration function *************************
+ void _f_callAbort(int type) ;
+ 
 // this part implemented in tasmc.c
 _tasmc_trie_entry* _f_trie_allocate();
 void* _f_safe_mmap(void* addr, size_t length, int prot, int flags, int fd, off_t offset);
@@ -126,7 +129,7 @@ void _f_free(void* ptr);
  * pointerType: heap(000) stack(001) global(010) others(011)
  * highter 3 bits of pointer(63~61bit)
  * */
-size_t _f_getPoniterType(void* ptr){
+size_t _f_getPointerType(void* ptr){
     size_t value = (size_t)ptr;
     size_t ty = value>>(_BITS_OF_SIZET-3);
     ty = ty&7;
@@ -142,10 +145,12 @@ size_t _f_getPoniterType(void* ptr){
  * */
 void _f_setPointerType(void* addr_of_ptr, size_t type){
 
-    size_t value = **((size_t**)addr_of_ptr) & _BITS_62_TO_61_NEG;
+    //printf("addr_of_ptr: %zx\n",(size_t)addr_of_ptr);
+    size_t value = *((size_t*)addr_of_ptr) & _BITS_62_TO_61_NEG;
+   // printf("addr_of_ptr: %zx\n",value);
     type = type <<(_BITS_OF_SIZET-3);
     value = value | type;
-
+   // printf("addr_of_ptr: %zx\n",value);
     *((void**)addr_of_ptr) = (void*)value;
 }
 
@@ -163,8 +168,9 @@ size_t _f_getPointerKey(void* ptr){
 
 // remember pass &pointer to ptr
 void _f_setPointerKey(void* addr_of_ptr, size_t key) {
-
-    size_t value = **((size_t**)addr_of_ptr)  & _BITS_60_TO_48_NEG;
+    // printf("addr_of_ptr: %zx\n",(size_t)addr_of_ptr);
+    size_t value =  *((size_t*)addr_of_ptr)  & _BITS_60_TO_48_NEG;
+   // printf("value: %zx\n",value);
     value = value | (key<<(_BITS_OF_SIZET-16));
 
     *((void**)addr_of_ptr) = (void*)value;
@@ -186,7 +192,12 @@ void _f_incPointerAddr(void* addr_of_ptr, size_t index , size_t ptr_size){
     void* ptr = *((void**)addr_of_ptr);
     void* realAddr = _f_maskingPointer(ptr);
     realAddr += index * ptr_size;
-    *((void**)addr_of_ptr) = (void*)realAddr;
+    size_t value = (size_t)realAddr;
+    if(value > 0xFFFFFFFFFFFFFFFF || value < 0) {
+        _f_callAbort(ERROR_VIRTUAL_ADDR);
+    }
+
+    *((void**)addr_of_ptr) += index * ptr_size;
 }
 
 // remember pass &pointer to parameter
@@ -195,7 +206,12 @@ void _f_decPointerAddr(void* addr_of_ptr, size_t index, size_t ptr_size) {
     void* ptr = *((void**)addr_of_ptr);
     void* realAddr = _f_maskingPointer(ptr);
     realAddr -= index * ptr_size;
-    *((void**)addr_of_ptr) = (void*)realAddr;
+    size_t value = (size_t)realAddr;
+    if(value > 0xFFFFFFFFFFFFFFFF || value < 0) {
+        _f_callAbort(ERROR_VIRTUAL_ADDR);
+    }
+
+    *((void**)addr_of_ptr) -= index * ptr_size;
 }
 
 // load(store) base(bound) from metadata 

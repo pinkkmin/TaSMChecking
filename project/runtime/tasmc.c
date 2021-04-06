@@ -81,7 +81,7 @@ void _initTaSMC(){
 _tasmc_trie_entry* _f_trie_allocate(){
   _tasmc_trie_entry* secondLevel = NULL;
   size_t length = (_TRIE_SECONDARY_TABLE_N_ENTRIES) * sizeof(_tasmc_trie_entry);
-  secondLevel = __softboundcets_safe_mmap(0, length, PROT_READ| PROT_WRITE, 
+  secondLevel = _f_safe_mmap(0, length, PROT_READ| PROT_WRITE, 
 					      TaSMC_MMAP_FLAGS, -1, 0);
 
   assert(secondLevel != (void*)-1); 
@@ -103,8 +103,8 @@ void* _f_malloc(size_t size){
 }
 
 void _f_free(void* ptr){
-
-  free(ptr);
+  void* realPtrAddr = _f_maskingPointer(ptr);
+  free(realPtrAddr);
 }
 
 
@@ -133,6 +133,10 @@ void _f_callAbort(int type) {
     case ERROR_OF_TEMPORAL:
         printf(stderr, "abort: temporal error with check memory... ... \n");
         break;
+    case ERROR_VIRTUAL_ADDR:
+        printf(stderr, "abort: virtual address error... ... \n");
+        break;
+      
     case ERROR_POINTER_UNKNOW:
     default:
         printf(stderr, "abort: unknow error... ... \n");
@@ -150,7 +154,7 @@ void _f_callAbort(int type) {
 void _f_printfPointerDebug(void* ptr) {
 
     size_t value = (size_t)ptr;
-    size_t ptrType = _f_getPoniterType(ptr);
+    size_t ptrType = _f_getPointerType(ptr);
     size_t ptrKey = _f_getPointerKey(ptr);
     size_t ptrAddr = (size_t)_f_maskingPointer(ptr);
 
@@ -171,13 +175,13 @@ void _f_tasmcPrintf(const char* str, ...)
 // called by rumtime library main() function
 extern int _f_pseudoMain(int argc, char **argv);
 
-int main(int argc, char **argv){
+int test_main(int argc, char **argv){
 
   #if __WORDSIZE == 32
   exit(1);
   #endif
   int retValue;
   char** new_argv = argv;
-  retValue = softboundcets_pseudo_main(argc, new_argv);
+ // retValue = softboundcets_pseudo_main(argc, new_argv);
   return 0;
 }

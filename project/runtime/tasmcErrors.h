@@ -17,6 +17,7 @@
 // for memory 
 #define ERROR_ALLOCATE_FAIL 10
 #define ERROR_FREE_FAIL 11
+#define ERROR_VIRTUAL_ADDR 12
 
 #define ERROR_OF_SPATIAL 20
 #define ERROR_OF_TEMPORAL 21
