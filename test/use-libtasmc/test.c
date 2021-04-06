@@ -15,18 +15,18 @@ int main() {
 
     // set key
     _f_setPointerKey(&p, 255);
-    printf("pset key:255: %zx\n\n",(size_t)p);
+    printf("p set key:255: %zx\n\n",(size_t)p);
 
     // p += 2
     _f_incPointerAddr(&p, 2, sizeof(*p));
-    printf("p value inc: %zx\n",(size_t)p);
+    printf("p value inc(index = 2): %zx\n",(size_t)p);
     int tp = _f_maskingPointer(p);
     printf("p tag : %zx\n",(size_t)p);
     printf("p real addr: %zx\n\n",(size_t)tp);
 
     // p -= 1
     _f_decPointerAddr(&p, 1, sizeof(*p));
-    printf("p tag : %zx\n",(size_t)p);
+    printf("p value dec(index = 1) : %zx\n",(size_t)p);
     tp = _f_maskingPointer(p);
     printf("p real addr: %zx\n\n",(size_t)tp);
 
