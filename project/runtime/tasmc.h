@@ -84,10 +84,10 @@ static const size_t _BITS_63_TO_48_MASK = 0xFFFFFFFFFFFF;
 void _f_tasmcPrintf(const char* str, ...);
 void _f_printfPointerDebug(void* ptr);
 void _f_callAbort(int type);
+void* _f_maskingPointer(void* ptr);
 
 // for trie table 
 extern _tasmc_trie_entry** _trie_table;
-extern _tasmc_trie_entry*  _trie_primary_level;
 extern _tasmc_trie_entry* _trie_second_level;
 
 // for free able table
@@ -146,12 +146,15 @@ size_t _f_getPointerType(void* ptr){
 void _f_setPointerType(void* addr_of_ptr, size_t type){
 
     //printf("addr_of_ptr: %zx\n",(size_t)addr_of_ptr);
-    size_t value = *((size_t*)addr_of_ptr) & _BITS_62_TO_61_NEG;
+     void* real_add_of_ptr = _f_maskingPointer(addr_of_ptr);
+    size_t value = *((size_t*)real_add_of_ptr) & _BITS_62_TO_61_NEG;
    // printf("addr_of_ptr: %zx\n",value);
     type = type <<(_BITS_OF_SIZET-3);
     value = value | type;
+
    // printf("addr_of_ptr: %zx\n",value);
-    *((void**)addr_of_ptr) = (void*)value;
+
+    *((void**)real_add_of_ptr) = (void*)value;
 }
 
 /***
@@ -168,12 +171,14 @@ size_t _f_getPointerKey(void* ptr){
 
 // remember pass &pointer to ptr
 void _f_setPointerKey(void* addr_of_ptr, size_t key) {
+
     // printf("addr_of_ptr: %zx\n",(size_t)addr_of_ptr);
-    size_t value =  *((size_t*)addr_of_ptr)  & _BITS_60_TO_48_NEG;
+    void* real_add_of_ptr = _f_maskingPointer(addr_of_ptr);
+    size_t value =  *((size_t*)real_add_of_ptr)  & _BITS_60_TO_48_NEG;
    // printf("value: %zx\n",value);
     value = value | (key<<(_BITS_OF_SIZET-16));
 
-    *((void**)addr_of_ptr) = (void*)value;
+    *((void**)real_add_of_ptr) = (void*)value;
 }
 
 /***
@@ -189,7 +194,8 @@ void* _f_maskingPointer(void* ptr){
 // and the sizeof(*ptr)
 void _f_incPointerAddr(void* addr_of_ptr, size_t index , size_t ptr_size){
 
-    void* ptr = *((void**)addr_of_ptr);
+    void* real_add_of_ptr = _f_maskingPointer(addr_of_ptr);
+    void* ptr = *((void**)real_add_of_ptr);
     void* realAddr = _f_maskingPointer(ptr);
     realAddr += index * ptr_size;
     size_t value = (size_t)realAddr;
@@ -197,13 +203,14 @@ void _f_incPointerAddr(void* addr_of_ptr, size_t index , size_t ptr_size){
         _f_callAbort(ERROR_VIRTUAL_ADDR);
     }
 
-    *((void**)addr_of_ptr) += index * ptr_size;
+    *((void**)real_add_of_ptr) += index * ptr_size;
 }
 
 // remember pass &pointer to parameter
 void _f_decPointerAddr(void* addr_of_ptr, size_t index, size_t ptr_size) {
 
-    void* ptr = *((void**)addr_of_ptr);
+    void* real_add_of_ptr = _f_maskingPointer(addr_of_ptr);
+    void* ptr = *((void**)real_add_of_ptr);
     void* realAddr = _f_maskingPointer(ptr);
     realAddr -= index * ptr_size;
     size_t value = (size_t)realAddr;
@@ -211,24 +218,44 @@ void _f_decPointerAddr(void* addr_of_ptr, size_t index, size_t ptr_size) {
         _f_callAbort(ERROR_VIRTUAL_ADDR);
     }
 
-    *((void**)addr_of_ptr) -= index * ptr_size;
+    *((void**)real_add_of_ptr) -= index * ptr_size;
 }
 
 // load(store) base(bound) from metadata 
 void* _f_loadBaseOfMetaData(void* addr_of_ptr){
-    _tasmc_trie_entry* entry = (_tasmc_trie_entry*)addr_of_ptr;
+
+    void* real_add_of_ptr = _f_maskingPointer(addr_of_ptr);
+    size_t addr = (size_t)_f_maskingPointer(real_add_of_ptr);
+    size_t primayIndex, secondIndex;
+    _tasmc_trie_entry* secondLevelTrie;
+    primayIndex = (addr>>25);
+    secondIndex = (addr>>3) &0x3FFFFF;
+    secondLevelTrie = _trie_table[primayIndex];
+    _tasmc_trie_entry* entry = &secondLevelTrie[secondIndex];
+
     return entry->base;
 }
 
 void* _f_loadBoundOfMetadata(void* addr_of_ptr) {
-    _tasmc_trie_entry* entry = (_tasmc_trie_entry*)addr_of_ptr;
+    
+    void* real_add_of_ptr = _f_maskingPointer(addr_of_ptr);
+    size_t addr = (size_t)_f_maskingPointer(real_add_of_ptr);
+    size_t primayIndex, secondIndex;
+    _tasmc_trie_entry* secondLevelTrie;
+    primayIndex = (addr>>25);
+    secondIndex = (addr>>3) &0x3FFFFF;
+    secondLevelTrie = _trie_table[primayIndex];
+    _tasmc_trie_entry* entry = &secondLevelTrie[secondIndex];
+   // _tasmc_trie_entry* entry = (_tasmc_trie_entry*)real_add_of_ptr;
+
     return entry->bound;
 }
 
 void _f_storeMetaData(void* addr_of_ptr, void* base, void* bound){
-
-    size_t addr = (size_t)addr_of_ptr;
-    size_t primayIndex,secondIndex;
+    
+    void* real_add_of_ptr = _f_maskingPointer(addr_of_ptr);
+    size_t addr = (size_t)_f_maskingPointer(real_add_of_ptr);
+    size_t primayIndex, secondIndex;
     _tasmc_trie_entry* secondLevelTrie;
     primayIndex = (addr>>25);
     secondIndex = (addr>>3) &0x3FFFFF;
@@ -242,6 +269,12 @@ void _f_storeMetaData(void* addr_of_ptr, void* base, void* bound){
 
     entry->base = base;
     entry->bound = bound;
+
+    // printf("*******************************************\n");
+    // printf("bound: %zx\n", (size_t)bound);
+    // printf("entry->bound: %zx\n", (size_t)entry->bound);
+    // printf("*******************************************\n");
+
 } 
 
 void _f_deallocatePointer(void* ptr) {
@@ -420,6 +453,9 @@ void _f_allocateSecondaryTrieRange(void* start, size_t size){
   size_t ednAddr = (size_t)((void*)(start + size));
   size_t primaryStart = startAddr >> 25;
   size_t primaryEnd = ednAddr >> 25;
+
+//   printf("start:%zx,  end: %zx\n", (size_t)startAddr, (size_t)ednAddr); 
+//   printf("primaryStart:%zx,  primaryEnd: %zx\n", (size_t)primaryStart, (size_t)primaryEnd); 
 
   while (primaryStart <= primaryEnd)
   {

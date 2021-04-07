@@ -30,7 +30,6 @@
 
 // for trie table
 _tasmc_trie_entry** _trie_table;
-_tasmc_trie_entry*  _trie_primary_level;
 _tasmc_trie_entry* _trie_second_level;
 
 //free able table for heap
@@ -45,19 +44,24 @@ void* _shadow_stack_ptr = NULL;
  * */
 void _initTaSMC(){
 
-    size_t triePrimaryLevelLength = _TRIE_PRIMARY_TABLE_N_ENTRIES * sizeof(void*);
-    _trie_primary_level = mmap(0, triePrimaryLevelLength, 
+    size_t triePrimaryLevelLength = _TRIE_PRIMARY_TABLE_N_ENTRIES * sizeof(_tasmc_trie_entry*);
+    _trie_table = mmap(0, triePrimaryLevelLength, 
 					    PROT_READ| PROT_WRITE, 
 					    TaSMC_MMAP_FLAGS, -1, 0);
-  assert(_trie_primary_level != (void *)-1);  
+
+  //printf("debung****************\n"); 
+  //printf("_trie_table: %zx\n", (size_t)_trie_table);
+  assert(_trie_table != (void *)-1);  
 
   int* temp = malloc(1);
+  //printf("temp:%zx\n", (size_t)temp); 
   _f_allocateSecondaryTrieRange(0, (size_t)temp);
-
+  //printf("debung****************\n"); 
   size_t freeTableLength = _FREE_ABLE_TABLE_N_KEY * sizeof(void*);
     _free_able_table = mmap(0, freeTableLength, 
 					    PROT_READ| PROT_WRITE, 
 					    TaSMC_MMAP_FLAGS, -1, 0);
+             
   assert(_free_able_table != (void *)-1); 
 
   size_t shadowLength = _SHADOW_STACK_N_ENTRIES * sizeof(void*);
@@ -103,6 +107,7 @@ void* _f_malloc(size_t size){
 }
 
 void _f_free(void* ptr){
+
   void* realPtrAddr = _f_maskingPointer(ptr);
   free(realPtrAddr);
 }
