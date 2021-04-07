@@ -9,6 +9,8 @@ The Temporal and Spatial Memory Safety Checking For C at Runtime.
    |- identity-pointer
    |- maksing-pointer
    |- use-libtasmc
+   |- check-spatial
+   |- test-shadow-stack
 |- project
    |- rumtime
    |- pass
@@ -26,5 +28,5 @@ The Temporal and Spatial Memory Safety Checking For C at Runtime.
    - [ ] developing pass out of source
    - [x] learning pass: create [LLVM IR]
 - [ ] design&review
-- [ ] testing
+- [x] testing
 - [x] listen to **Sugar Plum Ferry**. 

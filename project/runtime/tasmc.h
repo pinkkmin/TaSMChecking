@@ -277,6 +277,7 @@ void _f_storeMetaData(void* addr_of_ptr, void* base, void* bound){
 
 } 
 
+// PS: not add to pass
 void _f_deallocatePointer(void* ptr) {
 
 }
@@ -391,8 +392,8 @@ void _f_removePtrFromFreeTable(void* ptr) {
 size_t _f_isFreeAbleOfPointer(void* ptr) {
     size_t ptr_key = _f_getPointerKey(ptr);
     size_t flag = *(_free_able_table + ptr_key);
-    if(flag ==PTR_FREE_ABLE) return flag;
-    return PTR_FREE_ABLE;
+    if(flag == PTR_FREE_ABLE) return flag;
+    return PTR_FREE_UNABLE;
 }
 
 // propagation pointer metadata, key, type.
@@ -407,7 +408,7 @@ void _f_checkSpatialLoadPtr(void* ptr, void* base, void* bound, size_t size){
 
     void* addr = _f_maskingPointer(ptr);
     if ((addr < base) || ((void*)(addr + size) > bound)) {
-        _f_tasmcPrintf("In  Load Dereference Checking, base=%zx, bound=%zx, ptr=%zx\n",
+        _f_tasmcPrintf("\nTaSMChecking:: In  Load Dereference Checking, base=%zx, bound=%zx, ptr=%zx\n",
     			   base, bound, ptr);  
                    _f_callAbort(ERROR_OF_SPATIAL_LDC);
     }
@@ -417,7 +418,7 @@ void _f_checkSpatialStorePtr(void* ptr, void* base, void* bound, size_t size){
 
     void* addr = _f_maskingPointer(ptr);
     if ((addr < base) || ((void*)(addr + size) > bound)) {
-        _f_tasmcPrintf("In  Store Dereference Checking, base=%zx, bound=%zx, ptr=%zx\n",
+        _f_tasmcPrintf("\nTaSMChecking:: In  Store Dereference Checking, base=%zx, bound=%zx, ptr=%zx\n",
     			   base, bound, ptr);  
                    _f_callAbort(ERROR_OF_SPATIAL_SDC);
     }
@@ -427,10 +428,11 @@ void _f_checkSpatialStorePtr(void* ptr, void* base, void* bound, size_t size){
 void _f_checkTemporalLoadPtr(void* ptr){
 
    size_t flag =  _f_isFreeAbleOfPointer(ptr);
-    size_t key = _f_getPointerKey(key);
+   size_t key = _f_getPointerKey(key);
+  //printf("flag: %zx\n", flag);
 
     if(flag != PTR_FREE_ABLE) {
-        _f_tasmcPrintf("temporal load check, invalid pointer key. key = %zx,ptr =%zx\n", key, ptr);
+        _f_tasmcPrintf("\nTaSMChecking:: temporal load check, invalid pointer key. key = %zx,ptr =%zx\n", key, ptr);
         _f_callAbort(ERROR_OF_TEMPORAL_LDC);  
     }
 }
@@ -441,7 +443,7 @@ void _f_checkTemporalStorePtr(void* ptr) {
     size_t key = _f_getPointerKey(key);
 
     if(flag != PTR_FREE_ABLE) {
-       _f_tasmcPrintf("temporal store check, invalid pointer key. key = %zx,ptr =%zx\n", key,ptr);
+       _f_tasmcPrintf("\nTaSMChecking:: temporal store check, invalid pointer key. key = %zx,ptr =%zx\n", key,ptr);
      _f_callAbort(ERROR_OF_TEMPORAL_SDC);  
     }
 }

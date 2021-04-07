@@ -1,7 +1,7 @@
 #include<stdio.h>
 #include<stdlib.h>
 #include<malloc.h>
- // #include "/root/TaSMChecking/project/runtime/tasmc.h"
+//#include "/root/TaSMChecking/project/runtime/tasmc.h"
 int main() {
 
     int *p = (int*)malloc(sizeof(int)*8);
@@ -33,14 +33,14 @@ int main() {
     printf("flag: %zx\n", flag);
     p += 9;
 
-    // check
+    // check spatial memory errors
     _f_checkSpatialLoadPtr(p, base, bound, sizeof(*p));
 
 
+    // check heap temporal memory erros
+    // _f_removePtrFromFreeTable(p);
+    // _f_checkTemporalLoadPtr(p);
 
-
-
-    
     free(q);
     return 0;
 }
