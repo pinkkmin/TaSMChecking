@@ -113,6 +113,7 @@ void tasmChecking::constructCheckHandlers(Module &module) {
   // void _f_checkTemporalStorePtr(void* ptr)
   module.getOrInsertFunction("_f_checkTemporalStorePtr", VoidTy, VoidPtrTy,
                              NULL);
+                                  
 }
 
 void tasmChecking::constructMetadataHandlers(Module &module) {
@@ -126,9 +127,42 @@ void tasmChecking::constructMetadataHandlers(Module &module) {
     //void _f_storeMetaData(void* addr_of_ptr, void* base, void* bound)
     module.getOrInsertFunction("_f_storeMetaData", VoidTy, VoidPtrTy, VoidPtrTy, VoidPtrTy, NULL);
 
+    // void _f_copyMetaData(void* addr_of_from, void* addr_of_dest)
+     module.getOrInsertFunction("_f_copyMetaData", VoidTy, VoidPtrTy, VoidPtrTy, NULL);
+
 }
 
 void tasmChecking::constructShadowStackHandlers(Module &module) {
+
+    // void* _f_loadBaseOfShadowStack(int args_no)
+    module.getOrInsertFunction("_f_loadBaseOfShadowStack", VoidPtrTy, Int32Ty, NULL);
+
+    // void* _f_storeBoundOfShadowStack(int args_no)
+    module.getOrInsertFunction("_f_storeBoundOfShadowStack", VoidPtrTy, Int32Ty, NULL);
+
+    // void _f_allocateShadowStackMetadata(size_t args_no)
+    module.getOrInsertFunction("_f_allocateShadowStackMetadata", VoidPtrTy, Int32Ty, NULL);
+
+    // void _f_deallocateShadowStackMetaData()
+    module.getOrInsertFunction("_f_deallocateShadowStackMetaData", VoidTy, NULL);
+
+    // size_t _f_allocatePtrKey()
+    module.getOrInsertFunction("_f_allocatePtrKey", SizeTy, NULL);
+
+    // size_t _f_getPtrFreeFlagFromFAT(size_t ptrKey)
+    module.getOrInsertFunction("_f_getPtrFreeFlagFromFAT", SizeTy, SizeTy, NULL);
+
+    // void _f_setPtrFreeFlagToFAT(size_t ptrKey, size_t flag)
+    module.getOrInsertFunction("_f_setPtrFreeFlagToFAT", SizeTy, SizeTy, SizeTy, NULL);
+
+    // void _f_addPtrToFreeTable(size_t ptrKey)
+    module.getOrInsertFunction("_f_addPtrToFreeTable", VoidTy, SizeTy, NULL);
+
+    // void _f_removePtrFromFreeTable(void* ptr)
+    module.getOrInsertFunction("_f_removePtrFromFreeTable", VoidTy, VoidPtrTy, NULL);
+
+    // size_t _f_isFreeAbleOfPointer(void* ptr)
+    module.getOrInsertFunction("_f_isFreeAbleOfPointer", VoidTy, VoidPtrTy, NULL);
 
 }
 
@@ -151,6 +185,14 @@ void tasmChecking::constructPointerHandlers(Module &module) {
   // void _f_decPointerAddr(void* addr_of_ptr, size_t index, size_t ptr_size)
   module.getOrInsertFunction("_f_decPointerAddr", VoidPtrTy, SizeTy, SizeTy,
                              NULL);
+
+  // void* _f_cmpPointerAddr(void* ptrLhs, void* ptrRhs, int op)
+  module.getOrInsertFunction("_f_cmpPointerAddr", VoidPtrTy, VoidPtrTy, VoidPtrTy, Int32Ty,
+                             NULL);
+
+   // void* _f_typeCasePointer(void* ptr)
+ module.getOrInsertFunction("_f_typeCasePointer", VoidPtrTy, VoidPtrTy,
+                             NULL);                         
 }
 
 // construct Handlers initing

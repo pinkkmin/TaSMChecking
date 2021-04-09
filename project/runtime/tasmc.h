@@ -33,6 +33,19 @@
 /// DEBUG FOR TaSMC
 #define TaSMC_DEBUG_FLAG 0
 
+#define TaSMC_BOOL_TRUE 1
+#define TaSMC_BOOL_FALSE 0
+
+#define TaSMC_CMP_EQUAL 0
+#define TaSMC_CMP_LESS 10  // 小于
+#define TaSMC_CMP_MORE 11  // 大于
+#define TaSMC_CMP_LESS_EQUAL 20  // 小于等于
+#define TaSMC_CMP_MORE_EQUAL 21  // 大于等于  
+
+#define TaSMC_SHIFT_LEFT 0  // 左移
+#define TaSMC_SHIFT_RIGHT 1  // 右移 
+#define TaSMC_SHIFT_LOGIC_RIGHT 10  // 逻辑右移 
+
 #define TaSMC_MMAP_FLAGS (MAP_PRIVATE|MAP_ANONYMOUS|MAP_NORESERVE)
 
 // invalid vlaue of pointer
@@ -220,6 +233,55 @@ void _f_decPointerAddr(void* addr_of_ptr, size_t index, size_t ptr_size) {
 
     *((void**)real_add_of_ptr) -= index * ptr_size;
 }
+
+
+// compare the pointer address
+void* _f_cmpPointerAddr(void* ptrLhs, void* ptrRhs, int op){
+    
+    void* res = 0;
+    void *basePtrLhs = _f_maskingPointer(ptrLhs), *basePtrRhs = _f_maskingPointer(ptrRhs);
+
+    switch (op)
+    {
+        case TaSMC_CMP_EQUAL:
+        return basePtrLhs == basePtrRhs;
+
+        case TaSMC_CMP_LESS:
+            return basePtrLhs < basePtrRhs;
+
+        case TaSMC_CMP_LESS_EQUAL:
+            return basePtrLhs <= basePtrRhs;
+        case TaSMC_CMP_MORE:
+            return basePtrLhs > basePtrRhs;
+        case TaSMC_CMP_MORE_EQUAL:    
+            return basePtrLhs <= basePtrRhs;
+        default:
+            break;
+    }
+
+    return res;
+}
+
+// bitwase
+// void* _f_shiftPointerAddr(void* ptr, size_t op, size_t step){
+
+//     void* base_ptr = 0;
+//     switch (op)
+//     {
+//         case  TaSMC_SHIFT_LEFT:
+//             return base_ptr<<step;
+        
+//         default:
+//             break;
+//     }
+//     return base_ptr;
+// }
+
+// type case
+void* _f_typeCasePointer(void* ptr) {
+    return _f_maskingPointer(ptr);
+}
+/*******************************************************************************************************/
 
 // load(store) base(bound) from metadata 
 void* _f_loadBaseOfMetaData(void* addr_of_ptr){
