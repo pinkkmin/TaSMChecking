@@ -2,6 +2,21 @@
 #include<stdlib.h>
 #include<malloc.h>
 //#include "/root/TaSMChecking/project/runtime/tasmc.h"
+
+/**  test function list ****
+ *   _f_allocatePtrKey  
+ *   _f_setPointerType  
+ *  _f_setPointerKey    
+ *  _f_addPtrToFreeTable 
+ *  _f_storeMetaData   
+ *  _f_loadBaseOfMetaData 
+ *  _f_loadBoundOfMetadata 
+ *  _f_getPtrFreeFlagFromFAT 
+ *  _f_checkSpatialLoadPtr 
+ *  _f_removePtrFromFreeTable
+ *  _f_checkTemporalLoadPtr
+ * */
+
 int main() {
 
     int *p = (int*)malloc(sizeof(int)*8);

@@ -8,3 +8,5 @@
 - **masking-pointer**
 - **use-libtasmc**
 - **check-spatial**
+- **test-shadow-stack**
+- **operator-pointer**
