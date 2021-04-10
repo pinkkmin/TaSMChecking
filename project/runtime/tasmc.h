@@ -111,12 +111,12 @@ size_t ptrKeyCounter = 0; // loop allocate：ptrKey
 ******************
 *  ptr1_base
 * ------------------ 
-*  ptr1_bound
+*  ptr1_bound          : arg_no += 1
 *-------------------
 * ... args ....        : 假如有更多的函数参数是指针 继续添加 ptr2_base,ptr2_bound
-* ------------------ 
+* ------------------   
 *   ret_base           : 返回值是指针时 传递 ret_ptr的base和bound
-*   ret_bound
+*   ret_bound          : arg_no always 0 arg_no = arg_is_pointer_count
 * ------------------           
 *  current_size        <---  curr_ptr  // 记录当前函数传递的函数参数空间大小 ：size = (args_ptrs_no+1) * (size)metadata * sizeof(void*)
 * ------------------     
@@ -351,19 +351,37 @@ void* _f_loadBaseOfShadowStack(int args_no){
     assert(args_no >= 0);
 
     size_t index = _BASE_INDEX + args_no * _METADATA_NUM_FIELDS + 2;
-    size_t* base = _shadow_stack_ptr + index; 
-
+    size_t* base_ptr = _shadow_stack_ptr + index; 
+    void* base = *(void**)base_ptr;
     return base;
 }
 
-void* _f_storeBoundOfShadowStack(int args_no){
+void* _f_loadBoundOfShadowStack(int args_no){
+
+   assert(args_no >= 0);
+
+    size_t index = _BOUND_INDEX + args_no * _METADATA_NUM_FIELDS + 2;
+    size_t* bound_ptr = _shadow_stack_ptr + index; 
+    void* bound = *(void**)bound_ptr;    
+    return bound;
+}
+
+void _f_storeBaseOfShadowStack(void* base, int args_no){
+
+     assert(args_no >= 0);
+
+     size_t index = _BASE_INDEX + args_no * _METADATA_NUM_FIELDS + 2;
+     void** base_ptr = (void**)(_shadow_stack_ptr + index);
+     *(base_ptr) = base;
+}
+
+void _f_storeBoundOfShadowStack(void* bound, int args_no){
 
      assert(args_no >= 0);
 
      size_t index = _BOUND_INDEX + args_no * _METADATA_NUM_FIELDS + 2;
-     size_t bound = _shadow_stack_ptr + index;
-
-     return bound;
+     void** bound_ptr = (void**)(_shadow_stack_ptr + index);
+     *(bound_ptr) = bound;
 }
 
 // allocate(dellocate) meataData from shadow stack
