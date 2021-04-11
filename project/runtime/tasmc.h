@@ -26,7 +26,7 @@
  * func：下划线加驼峰 _f_checkingTemporalAndSpatital()
  * global：_g_ 
  * const：全部大写加下划线
- * 局部： 随意 最好不要乱起
+ * 局部： 随意 最好不要乱起 
  * tips: void*表示任意传参
  *****************************************************/
 
@@ -130,7 +130,7 @@ extern size_t* _shadow_stack_ptr;
 
 // ***************** declaration function *************************
  void _f_callAbort(int type) ;
- 
+
 // this part implemented in tasmc.c
 _tasmc_trie_entry* _f_trie_allocate();
 void* _f_safe_mmap(void* addr, size_t length, int prot, int flags, int fd, off_t offset);

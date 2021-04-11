@@ -1,12 +1,9 @@
 # Test Demo
 
-验证想法正确性以及可实现性。
-
-
-- **add-function-from-lib**
-- **identity-pointer**
-- **masking-pointer**
-- **use-libtasmc**
-- **check-spatial**
-- **test-shadow-stack**
-- **operator-pointer**
+- **add-function-from-lib** :ballot_box_with_check:​
+- **identity-pointer** :ballot_box_with_check:​
+- **masking-pointer** :ballot_box_with_check:​
+- **use-libtasmc** :ballot_box_with_check:​
+- **check-spatial** :ballot_box_with_check:​
+- **test-shadow-stack** :ballot_box_with_check:​
+- **operator-pointer** :ballot_box_with_check:​
