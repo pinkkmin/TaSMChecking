@@ -38,7 +38,41 @@ private:
 
   // for ty:global
   /***************** [ Function* ] ****************************/
-  Function *m_;
+  // check funciton
+  Function *m__f_checkSpatialLoadPtr;
+  Function *m__f_checkSpatialStorePtr;
+  Function *m__f_checkTemporalLoadPtr;
+  Function *m__f_checkTemporalStorePtr;
+
+  // load metadata
+  Function *m_f_loadBaseOfMetaData;
+  Function *m_f_loadBoundOfMetadata;
+  Function *m_f_storeMetaData;
+  Function *m_f_copyMetaData;
+  
+  // shadow-stack function
+  Function *m_f_loadBaseOfShadowStack;
+  Function *m_f_storeBoundOfShadowStack;
+  Function *m_f_allocateShadowStackMetadata;
+  Function *m_f_deallocateShadowStackMetaData;
+  Function *m_f_allocatePtrKey;
+  Function *m_f_getPtrFreeFlagFromFAT;
+  Function *m_f_setPtrFreeFlagToFAT;
+  Function *m_f_addPtrToFreeTable;
+  Function *m_f_removePtrFromFreeTable;
+  Function *m_f_isFreeAbleOfPointer;
+  
+  // operating pointer function
+  Function *m_f_getPointerType;
+  Function *m_f_setPointerType;
+  Function *m_f_maskingPointer;
+  Function *m_f_incPointerAddr;
+  Function *m_f_decPointerAddr;
+  Function *m_f_cmpPointerAddr;
+  Function *m_f_typeCasePointer;
+
+  // others function
+  
   // ... ...
 public:
   static char ID;
@@ -47,11 +81,21 @@ public:
 
   ///////////////////////////////////////////////////////////////////////////////////////////
   void initTypeName(Module &);
+  // insert function from library.
   void constructCheckHandlers(Module &);
   void constructMetadataHandlers(Module &);
   void constructShadowStackHandlers(Module &);
   void constructPointerHandlers(Module &);
+  void constructOthersHandlers(Module &);
   void constructHandlers(Module &);
+  
+  // getFunction* from insert
+  void getCheckFunctions(Module &);
+  void getMetadataFunctions(Module &);
+  void getShadowStackFunctions(Module &);
+  void getPointerFunctions(Module &);
+  void constructOthersFunctions(Module &);
+
 };
 } // namespace
 
@@ -76,7 +120,6 @@ static RegisterStandardPasses
                               registertasmCheckingPass);
 
 /**************************************************************************************************************************/
-
 /** rename some types
  * */
 void tasmChecking::initTypeName(Module &module) {
@@ -195,6 +238,31 @@ void tasmChecking::constructPointerHandlers(Module &module) {
                              NULL);                         
 }
 
+void constructHandlers(Module &module){
+
+}
+
+/*********************************************************************************************************************************/
+void getCheckFunctions(Module &module){
+
+}
+
+void getMetadataFunctions(Module &module){
+
+}
+
+void getShadowStackFunctions(Module &module){
+
+}
+
+void getPointerFunctions(Module &module){
+
+}
+
+void constructOthersFunctions(Module &module){
+  
+}
+/**********************************************************************************************************************************/
 // construct Handlers initing
 void tasmChecking::constructHandlers(Module &module) {
 
@@ -203,6 +271,7 @@ void tasmChecking::constructHandlers(Module &module) {
   constructShadowStackHandlers(module);
   constructMetadataHandlers(module);
   constructPointerHandlers(module);
+  constructHandlers(module);
 }
 
 bool tasmChecking::runOnModule(Module &module) {

@@ -125,7 +125,7 @@ size_t ptrKeyCounter = 0; // loop allocate：ptrKey
 *   ...   ...        
 ******************** <-- shadow_stack_space_begin 
 */
-extern void* _shadow_stack_ptr;
+extern size_t* _shadow_stack_ptr;
 // extern void* _shadow_stack_space_begin;
 
 // ***************** declaration function *************************
@@ -234,8 +234,13 @@ void _f_decPointerAddr(void* addr_of_ptr, size_t index, size_t ptr_size) {
     *((void**)real_add_of_ptr) -= index * ptr_size;
 }
 
-
-// compare the pointer address
+/** compare the pointer address
+ * TaSMC_CMP_EQUAL 0
+ * TaSMC_CMP_LESS 10  // 小于
+ * TaSMC_CMP_MORE 11  // 大于
+ * TaSMC_CMP_LESS_EQUAL 20  // 小于等于
+ * TaSMC_CMP_MORE_EQUAL 21  // 大于等于  
+ * */
 void* _f_cmpPointerAddr(void* ptrLhs, void* ptrRhs, int op){
     
     void* res = 0;
@@ -402,7 +407,7 @@ void _f_deallocateShadowStackMetaData(){
 
     size_t* resStackPtr = _shadow_stack_ptr;
     size_t resStackSize = *((size_t*)resStackPtr);
-
+    printf("resStackSize: %zu\n", resStackSize);
     assert((resStackSize >=0 && resStackSize <= _SHADOW_STACK_N_ENTRIES));
 
     _shadow_stack_ptr -= (2 + resStackSize);

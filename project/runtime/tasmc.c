@@ -36,7 +36,7 @@ _tasmc_trie_entry* _trie_second_level;
 size_t* _free_able_table;
 
 // for shadow stack
-void* _shadow_stack_ptr = NULL;
+size_t* _shadow_stack_ptr = NULL;
 // void* _shadow_stack_space_begin = NULL;
 
 /** init memory for tasmc.
