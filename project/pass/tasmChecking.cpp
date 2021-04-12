@@ -29,12 +29,16 @@ private:
   Type *Int32Ty;
   Type *PtrOfVoidPtrTy;
   Type *PtrOfSizeTy;
+  //
 
+  StringMap<bool> m_func_def_tasmc;
+  std::map<Value *, int> m_is_pointer;
+  std::map<Value *, int> m_present_in_original;
   // for ty:stack
   StringMap<Value *>
       func_id_num_table; //每一个call函数 该函数有一个 id_num ++ -- 初始为0
-  std::map<Value *, Value *> m_pointer_base;  //
-  std::map<Value *, Value *> m_pointer_bound; // 
+  std::map<Value *, Value *> m_pointer_base;
+  std::map<Value *, Value *> m_pointer_bound;
 
   // for ty:global
   /***************** [ Function* ] ****************************/
@@ -78,8 +82,8 @@ public:
   static char ID;
   tasmChecking() : ModulePass(ID) {}
   bool runOnModule(Module &) override;
-
   ///////////////////////////////////////////////////////////////////////////////////////////
+  void initializeVariables(Module &);
   void initTypeName(Module &);
   /* insert function from library. */
   void constructCheckHandlers(Module &);
@@ -97,7 +101,49 @@ public:
   void getFunctions(Module &);
 
   /* helper functions  */
-  int getPtrNumOfArgs(CallInst*); // get count of pointer from args（and return）
+  void scanfFirstPass(Function *);
+  void scanfSecondPass(Function *);
+  void insertDereferenceCheck(Function *);
+  void transformMainFunc(Module &);
+  void identifyOriginalInst(Function *);
+  bool isFuncDefTaSMC(const std::string &str); // 是否定义
+  bool checkIfFunctionOfInterest(Function*);
+  /* handler llvm ir functions */
+  void handleAlloca(AllocaInst *, Value *, Value *, Value *, BasicBlock *,
+                    BasicBlock::iterator &);
+
+  void insertMetadataLoad(LoadInst *);
+  void handleLoad(LoadInst *);
+  void handleVectorStore(StoreInst *);
+  void handleStore(StoreInst *);
+  void handleGEP(GetElementPtrInst *);
+
+  void handleBitCast(BitCastInst *);
+  void handlePHIPass1(PHINode *); // 一趟生成
+  void handlePHIPass2(PHINode *); // 二趟填写
+  void handleCall(CallInst *);
+  void handleMemcpy(CallInst *);
+  void handleIndirectCall(CallInst *);
+  void handleExtractValue(ExtractValueInst *); // 提取
+  void handleExtractElement(ExtractElementInst *);
+  void handleSelect(SelectInst *, int);
+  void handleIntToPtr(IntToPtrInst *);
+
+  /* associate functions */
+  void associateBaseBound(Value *, Value *, Value *);
+  void dissociateBaseBound(Value *);
+  Value *getAssociatedBase(Value *);
+  Value *getAssociatedBound(Value *);
+  void associateFunctionKey(Value *, Value *, Value *);
+  void dissociateFuncitonKey(Value *);
+  Value *getAssociatedFuncitonKey(Value *);
+  void addBaseBoundGlobals(Module &);
+
+  void insertStoreBaseBoundFunc(Value *, Value *, Value *, Instruction *);
+  int getPtrNumOfArgs(
+      CallInst *); // get count of pointer from args（and return）
+  bool hasPtrArgRetType(Function *);
+  bool checkTypeHasPtrs(Argument *);
 };
 } // namespace
 
@@ -143,6 +189,7 @@ void tasmChecking::initTypeName(Module &module) {
  * */
 void tasmChecking::constructCheckHandlers(Module &module) {
 
+ 
   // void _f_checkSpatialLoadPtr(void* ptr, void* base, void* bound, size_t
   // size)
   module.getOrInsertFunction("_f_checkSpatialLoadPtr", VoidTy, VoidPtrTy,
@@ -297,15 +344,18 @@ void tasmChecking::getShadowStackFunctions(Module &module) {
 
   m_f_storeBoundOfShadowStack =
       module.getFunction("_f_storeBoundOfShadowStack");
-  assert(m_f_storeBoundOfShadowStack && "m_f_storeBoundOfShadowStack is NULL ? ");
+  assert(m_f_storeBoundOfShadowStack &&
+         "m_f_storeBoundOfShadowStack is NULL ? ");
 
   m_f_allocateShadowStackMetadata =
       module.getFunction("_f_allocateShadowStackMetadata");
-  assert(m_f_allocateShadowStackMetadata && "m_f_allocateShadowStackMetadata is NULL ? ");
+  assert(m_f_allocateShadowStackMetadata &&
+         "m_f_allocateShadowStackMetadata is NULL ? ");
 
   m_f_deallocateShadowStackMetaData =
       module.getFunction("_f_deallocateShadowStackMetaData");
-  assert(m_f_deallocateShadowStackMetaData && "m_f_deallocateShadowStackMetaData is NULL ? ");
+  assert(m_f_deallocateShadowStackMetaData &&
+         "m_f_deallocateShadowStackMetaData is NULL ? ");
 
   m_f_allocatePtrKey = module.getFunction("_f_allocatePtrKey");
   assert(m_f_allocatePtrKey && "m_f_allocatePtrKey is NULL ? ");
@@ -369,12 +419,123 @@ void tasmChecking::getFunctions(Module &module) {
   getPointerFunctions(module);
   getOthersFunctions(module);
 }
+void tasmChecking::initializeVariables(Module &module) {
+  constructHandlers(module);
+  getFunctions(module);
+}
+/****************************************************************************************************************************************/
+void tasmChecking::scanfFirstPass(Function *func) {}
+void tasmChecking::scanfSecondPass(Function *func) {}
+void tasmChecking::insertDereferenceCheck(Function *func) {}
+void tasmChecking::transformMainFunc(Module &module) {
 
+  Function *mainFunc = module.getFunction("main");
+  // doesn't have main then don't do anything
+  if (!mainFunc)
+    return;
+
+  Type *retType = mainFunc->getReturnType();
+  FunctionType *funcType = mainFunc->getFunctionType();
+  std::vector<Type *> args;
+
+  const AttributeList &Attrs = mainFunc->getAttributes();
+  AttributeSet FnAttrs = Attrs.getAttributes(AttributeList::FunctionIndex);
+  AttributeSet RetAttrs = Attrs.getAttributes(AttributeList::ReturnIndex);
+  SmallVector<AttributeSet, 8> argAttrs;
+
+  int arg_index = 1;
+  for (Function::arg_iterator i = mainFunc->arg_begin(),
+                              e = mainFunc->arg_end();
+       i != e; ++i, arg_index++) {
+    args.push_back(i->getType());
+    AttributeSet attrs = Attrs.getParamAttributes(arg_index);
+    if (attrs.hasAttributes()) {
+      AttrBuilder B(attrs);
+      argAttrs.push_back(AttributeSet::get(mainFunc->getContext(), B));
+    }
+  }
+
+  FunctionType *newFuncType =
+      FunctionType::get(retType, args, funcType->isVarArg());
+  Function *newFunc = NULL;
+  newFunc =
+      Function::Create(newFuncType, mainFunc->getLinkage(), "_f_pseudoMain");
+
+  newFunc->copyAttributesFrom(mainFunc);
+  ArrayRef<AttributeSet> ArgAttrs(argAttrs);
+  newFunc->setAttributes(
+      AttributeList::get(mainFunc->getContext(), FnAttrs, RetAttrs, ArgAttrs));
+
+  mainFunc->getParent()->getFunctionList().insert(mainFunc->getIterator(),
+                                                  newFunc);
+  mainFunc->replaceAllUsesWith(newFunc);
+
+  // Splice the instructions from the old function into the new
+  // function and set the arguments appropriately
+  newFunc->getBasicBlockList().splice(newFunc->begin(),
+                                      mainFunc->getBasicBlockList());
+
+  Function::arg_iterator arg_newFunc = newFunc->arg_begin();
+  for (Function::arg_iterator arg_i = mainFunc->arg_begin(),
+                              arg_e = mainFunc->arg_end();
+       arg_i != arg_e; ++arg_i) {
+    arg_i->replaceAllUsesWith(&*arg_newFunc);
+    arg_newFunc->takeName(&*arg_i);
+    ++arg_newFunc;
+  }
+  // remove old main function
+  mainFunc->eraseFromParent();
+}
+void tasmChecking::identifyOriginalInst(Function *func) {}
+void tasmChecking::addBaseBoundGlobals(Module &module) {}
+bool tasmChecking::isFuncDefTaSMC(const std::string &str) {}
+bool tasmChecking::checkIfFunctionOfInterest(Function* func){
+  //if(isFuncDefTaSMC(func->getName()))
+    return false;
+
+  if(func->isDeclaration())
+    return false;
+
+  return true;
+}
+/****************************************************************************************************************************************/
+/* associate functions */
+void tasmChecking::associateBaseBound(Value *, Value *, Value *) {}
+void tasmChecking::dissociateBaseBound(Value *) {}
+Value *tasmChecking::getAssociatedBase(Value *) {}
+Value *tasmChecking::getAssociatedBound(Value *) {}
+void tasmChecking::associateFunctionKey(Value *, Value *, Value *) {}
+void tasmChecking::dissociateFuncitonKey(Value *) {}
+Value *tasmChecking::getAssociatedFuncitonKey(Value *) {}
+
+void tasmChecking::insertStoreBaseBoundFunc(Value *, Value *, Value *,
+                                            Instruction *) {}
+int tasmChecking::getPtrNumOfArgs(CallInst *) {}
+bool tasmChecking::hasPtrArgRetType(Function *func) {}
+bool tasmChecking::checkTypeHasPtrs(Argument *) {}
+/****************************************************************************************************************************************/
 bool tasmChecking::runOnModule(Module &module) {
 
   // construct something
-  constructHandlers(module);
-  getFunctions(module);
+  initializeVariables(module);
+
+  // transform main() to _f_pseudoMain()
+  transformMainFunc(module);
+  
+  addBaseBoundGlobals(module);
+
+  for (Module::iterator ff_begin = module.begin(), ff_end = module.end();
+       ff_begin != ff_end; ++ff_begin) {
+    Function *func_ptr = dyn_cast<Function>(ff_begin);
+    assert(func_ptr && "Not a function??");
+    
+    if (!checkIfFunctionOfInterest(func_ptr)) {
+      continue;
+    }  
+
+
+
+  }
 
   return true;
 }

@@ -1,0 +1,10 @@
+{
+    "files.associations": {
+        "*.asm": "mips",
+        "*.o": "c",
+        "memory": "cpp",
+        "type_traits": "cpp",
+        "*.tcc": "cpp",
+        "istream": "cpp"
+    }
+}
