@@ -39,11 +39,15 @@ size_t* _free_able_table;
 size_t* _shadow_stack_ptr = NULL;
 // void* _shadow_stack_space_begin = NULL;
 
+void _initTaSMC_ret(){
+ return ;
+}
 /** init memory for tasmc.
  *  primary mmap: shadow stack, free able table, trie(primary level & second level).
  * */
 void _initTaSMC(){
-
+    
+    printf(" in initing function:initTaSMC\n");
     size_t triePrimaryLevelLength = _TRIE_PRIMARY_TABLE_N_ENTRIES * sizeof(_tasmc_trie_entry*);
     _trie_table = mmap(0, triePrimaryLevelLength, 
 					    PROT_READ| PROT_WRITE, 
@@ -187,6 +191,7 @@ int main(int argc, char **argv){
   #endif
   int retValue;
   char** new_argv = argv;
+  printf("debug: running in runtime library main()\n");
   retValue = _f_pseudoMain(argc, new_argv);
   return retValue;
 }

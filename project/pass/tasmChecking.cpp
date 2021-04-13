@@ -184,15 +184,13 @@ void tasmChecking::initTypeName(Module &module) {
 /***
  * FunctionCallee getOrInsertFunction(StringRef Name, Type *RetTy,ArgsTy...
  * Args)
- *
- *
  * */
 void tasmChecking::constructCheckHandlers(Module &module) {
 
   // void _f_checkSpatialLoadPtr(void* ptr, void* base, void* bound, size_t
   // size)
   module.getOrInsertFunction("_f_checkSpatialLoadPtr", VoidTy, VoidPtrTy,
-                             VoidPtrTy, VoidPtrTy, SizeTy,nullptr);
+                             VoidPtrTy, VoidPtrTy, SizeTy, nullptr);
 
   // void _f_checkSpatialStorePtr(void* ptr, void* base, void* bound, size_t
   // size)
@@ -200,72 +198,60 @@ void tasmChecking::constructCheckHandlers(Module &module) {
                              VoidPtrTy, VoidPtrTy, SizeTy);
 
   // void _f_checkTemporalLoadPtr(void* ptr)
-  module.getOrInsertFunction("_f_checkTemporalLoadPtr", VoidTy, VoidPtrTy
-                             );
+  module.getOrInsertFunction("_f_checkTemporalLoadPtr", VoidTy, VoidPtrTy);
 
   // void _f_checkTemporalStorePtr(void* ptr)
-  module.getOrInsertFunction("_f_checkTemporalStorePtr", VoidTy, VoidPtrTy
-                             );
+  module.getOrInsertFunction("_f_checkTemporalStorePtr", VoidTy, VoidPtrTy);
 }
 
 void tasmChecking::constructMetadataHandlers(Module &module) {
 
   // void* _f_loadBaseOfMetaData(void* addr_of_ptr)
-  module.getOrInsertFunction("_f_loadBaseOfMetaData", VoidPtrTy, VoidPtrTy
-                             );
+  module.getOrInsertFunction("_f_loadBaseOfMetaData", VoidPtrTy, VoidPtrTy);
 
   // void* _f_loadBoundOfMetadata(void* addr_of_ptr)
-  module.getOrInsertFunction("_f_loadBoundOfMetadata", VoidPtrTy, VoidPtrTy
-                             );
+  module.getOrInsertFunction("_f_loadBoundOfMetadata", VoidPtrTy, VoidPtrTy);
 
   // void _f_storeMetaData(void* addr_of_ptr, void* base, void* bound)
   module.getOrInsertFunction("_f_storeMetaData", VoidTy, VoidPtrTy, VoidPtrTy,
                              VoidPtrTy);
 
   // void _f_copyMetaData(void* addr_of_from, void* addr_of_dest)
-  module.getOrInsertFunction("_f_copyMetaData", VoidTy, VoidPtrTy, VoidPtrTy
-                             );
+  module.getOrInsertFunction("_f_copyMetaData", VoidTy, VoidPtrTy, VoidPtrTy);
 }
 
 void tasmChecking::constructShadowStackHandlers(Module &module) {
 
   // void* _f_loadBaseOfShadowStack(int args_no)
-  module.getOrInsertFunction("_f_loadBaseOfShadowStack", VoidPtrTy, Int32Ty
-                             );
+  module.getOrInsertFunction("_f_loadBaseOfShadowStack", VoidPtrTy, Int32Ty);
 
   // void* _f_storeBoundOfShadowStack(int args_no)
-  module.getOrInsertFunction("_f_storeBoundOfShadowStack", VoidPtrTy, Int32Ty
-                             );
+  module.getOrInsertFunction("_f_storeBoundOfShadowStack", VoidPtrTy, Int32Ty);
 
   // void _f_allocateShadowStackMetadata(size_t args_no)
   module.getOrInsertFunction("_f_allocateShadowStackMetadata", VoidPtrTy,
                              Int32Ty);
 
   // void _f_deallocateShadowStackMetaData()
-  module.getOrInsertFunction("_f_deallocateShadowStackMetaData", VoidTy
-                             );
+  module.getOrInsertFunction("_f_deallocateShadowStackMetaData", VoidTy);
 
   // size_t _f_allocatePtrKey()
   module.getOrInsertFunction("_f_allocatePtrKey", SizeTy);
 
   // size_t _f_getPtrFreeFlagFromFAT(size_t ptrKey)
-  module.getOrInsertFunction("_f_getPtrFreeFlagFromFAT", SizeTy, SizeTy
-                             );
+  module.getOrInsertFunction("_f_getPtrFreeFlagFromFAT", SizeTy, SizeTy);
 
   // void _f_setPtrFreeFlagToFAT(size_t ptrKey, size_t flag)
-  module.getOrInsertFunction("_f_setPtrFreeFlagToFAT", SizeTy, SizeTy, SizeTy
-                             );
+  module.getOrInsertFunction("_f_setPtrFreeFlagToFAT", SizeTy, SizeTy, SizeTy);
 
   // void _f_addPtrToFreeTable(size_t ptrKey)
   module.getOrInsertFunction("_f_addPtrToFreeTable", VoidTy, SizeTy);
 
   // void _f_removePtrFromFreeTable(void* ptr)
-  module.getOrInsertFunction("_f_removePtrFromFreeTable", VoidTy, VoidPtrTy
-                             );
+  module.getOrInsertFunction("_f_removePtrFromFreeTable", VoidTy, VoidPtrTy);
 
   // size_t _f_isFreeAbleOfPointer(void* ptr)
-  module.getOrInsertFunction("_f_isFreeAbleOfPointer", VoidTy, VoidPtrTy
-                             );
+  module.getOrInsertFunction("_f_isFreeAbleOfPointer", VoidTy, VoidPtrTy);
 }
 
 void tasmChecking::constructPointerHandlers(Module &module) {
@@ -274,42 +260,96 @@ void tasmChecking::constructPointerHandlers(Module &module) {
   module.getOrInsertFunction("_f_getPointerType", SizeTy, VoidPtrTy);
 
   // void _f_setPointerType(void* addr_of_ptr, size_t type)
-  module.getOrInsertFunction("_f_setPointerType", VoidTy, VoidPtrTy, SizeTy
-                             );
+  module.getOrInsertFunction("_f_setPointerType", VoidTy, VoidPtrTy, SizeTy);
 
   // void* _f_maskingPointer(void* ptr)
-  module.getOrInsertFunction("_f_maskingPointer", VoidPtrTy, VoidPtrTy
-                             );
+  module.getOrInsertFunction("_f_maskingPointer", VoidPtrTy, VoidPtrTy);
 
   // void _f_incPointerAddr(void* addr_of_ptr, size_t index , size_t ptr_size)
-  module.getOrInsertFunction("_f_incPointerAddr", VoidPtrTy, SizeTy, SizeTy
-                             );
+  module.getOrInsertFunction("_f_incPointerAddr", VoidPtrTy, SizeTy, SizeTy);
 
   // void _f_decPointerAddr(void* addr_of_ptr, size_t index, size_t ptr_size)
-  module.getOrInsertFunction("_f_decPointerAddr", VoidPtrTy, SizeTy, SizeTy
-                             );
+  module.getOrInsertFunction("_f_decPointerAddr", VoidPtrTy, SizeTy, SizeTy);
 
   // void* _f_cmpPointerAddr(void* ptrLhs, void* ptrRhs, int op)
   module.getOrInsertFunction("_f_cmpPointerAddr", VoidPtrTy, VoidPtrTy,
                              VoidPtrTy, Int32Ty);
 
   // void* _f_typeCasePointer(void* ptr)
-  module.getOrInsertFunction("_f_typeCasePointer", VoidPtrTy, VoidPtrTy
-                             );
+  module.getOrInsertFunction("_f_typeCasePointer", VoidPtrTy, VoidPtrTy);
 }
 
+//
+// copy by softboundcets
 void tasmChecking::constructOthersHandlers(Module &module) {
+
+  module.getOrInsertFunction("__tasmc_global_init", VoidTy);
+
+  Function *initGlobalFunc = module.getFunction("__tasmc_global_init");
+  assert(initGlobalFunc && "__tasmc_global_init is NULL ? ");
+
+  initGlobalFunc->setDoesNotThrow();
+  initGlobalFunc->setLinkage(GlobalValue::InternalLinkage);
+
+  BasicBlock *BB =
+      BasicBlock::Create(module.getContext(), "entry", initGlobalFunc);
+  module.getOrInsertFunction("_initTaSMC", VoidTy);
+
+  Function *initTasmcFunc = module.getFunction("_initTaSMC");
+  assert(initTasmcFunc && "_initTaSMC is NULL ? ");
+
+  Instruction *ret = ReturnInst::Create(module.getContext(), BB);
+  CallInst::Create(initTasmcFunc, "", ret);
+
+  Type *Int32Type = IntegerType::getInt32Ty(module.getContext());
+  std::vector<Constant *> CtorInits;
+
+  CtorInits.push_back(ConstantInt::get(Int32Type, 0));
+  CtorInits.push_back(initGlobalFunc);
+
+  StructType *ST = ConstantStruct::getTypeForElements(CtorInits, false);
+  Constant *RuntimeCtorInit = ConstantStruct::get(ST, CtorInits);
+
+  //
+  // Get the current set of static global constructors and add the new ctor
+  // to the list.
+  //
+  std::vector<Constant *> CurrentCtors;
+  GlobalVariable *GVCtor = module.getNamedGlobal("llvm.global_ctors");
+  if (GVCtor) {
+    if (Constant *C = GVCtor->getInitializer()) {
+      for (unsigned index = 0; index < C->getNumOperands(); ++index) {
+        CurrentCtors.push_back(dyn_cast<Constant>(C->getOperand(index)));
+      }
+    }
+  }
+  CurrentCtors.push_back(RuntimeCtorInit);
+
+  //
+  // Create a new initializer.
+  //
+  ArrayType *AT =
+      ArrayType::get(RuntimeCtorInit->getType(), CurrentCtors.size());
+  Constant *NewInit = ConstantArray::get(AT, CurrentCtors);
+
+  //
+  // Create the new llvm.global_ctors global variable and remove the old one
+  // if it existed.
+  //
+  Value *newGVCtor = new GlobalVariable(module, NewInit->getType(), false,
+                                        GlobalValue::AppendingLinkage, NewInit,
+                                        "llvm.global_ctors");
+  if (GVCtor) {
+    newGVCtor->takeName(GVCtor);
+    GVCtor->eraseFromParent();
+  }
+
   // void _f_allocateSecondaryTrieRange(void* start, size_t size)
-
   // void _f_callAbort(int type) ;
-
   // _tasmc_trie_entry* _f_trie_allocate();
-
   // void* _f_safe_mmap(void* addr, size_t length, int prot, int flags, int fd,
   // off_t offset);
-
   // void* _f_malloc(size_t size);
-
   // void _f_free(void* ptr);
 }
 
@@ -424,7 +464,7 @@ void tasmChecking::getFunctions(Module &module) {
 }
 
 void tasmChecking::initializeVariables(Module &module) {
-  //errs()<<"initing\n";
+  // errs()<<"initing\n";
   initTypeName(module);
   constructHandlers(module);
   getFunctions(module);
@@ -436,6 +476,7 @@ void tasmChecking::insertDereferenceCheck(Function *func) {}
 void tasmChecking::transformMainFunc(Module &module) {
 
   Function *mainFunc = module.getFunction("main");
+  // errs()<<"transform main()\n";
   // doesn't have main then don't do anything
   if (!mainFunc)
     return;
@@ -493,8 +534,28 @@ void tasmChecking::transformMainFunc(Module &module) {
   mainFunc->eraseFromParent();
 }
 void tasmChecking::identifyOriginalInst(Function *func) {}
-void tasmChecking::addBaseBoundGlobals(Module &module) {}
-bool tasmChecking::isFuncDefTaSMC(const std::string &str) {return true;}
+
+void tasmChecking::addBaseBoundGlobals(Module &module) {
+  for (Module::global_iterator it = module.global_begin(),
+                               it_end = module.global_end();
+       it != it_end; ++it) {
+
+    GlobalVariable *gv = dyn_cast<GlobalVariable>(it);
+
+    if (!gv) {
+      continue;
+    }
+
+    if (StringRef(gv->getSection()) == "llvm.metadata") {
+      continue;
+    }
+
+    if (gv->getName() == "llvm.global_ctors") {
+      continue;
+    }
+  }
+}
+bool tasmChecking::isFuncDefTaSMC(const std::string &str) { return true; }
 bool tasmChecking::checkIfFunctionOfInterest(Function *func) {
   // if(isFuncDefTaSMC(func->getName()))
   return false;
@@ -508,25 +569,18 @@ bool tasmChecking::checkIfFunctionOfInterest(Function *func) {
 /* associate functions */
 void tasmChecking::associateBaseBound(Value *ptr, Value *base, Value *bound) {}
 void tasmChecking::dissociateBaseBound(Value *ptr) {}
-Value *tasmChecking::getAssociatedBase(Value *ptr) { return ptr;}
-Value *tasmChecking::getAssociatedBound(Value *ptr) { return ptr;}
+Value *tasmChecking::getAssociatedBase(Value *ptr) { return ptr; }
+Value *tasmChecking::getAssociatedBound(Value *ptr) { return ptr; }
 void tasmChecking::associateFunctionKey(Value *key, Value *key1, Value *key2) {}
 void tasmChecking::dissociateFuncitonKey(Value *key) {}
-Value *tasmChecking::getAssociatedFuncitonKey(Value *key) {
-  return key;
-}
+Value *tasmChecking::getAssociatedFuncitonKey(Value *key) { return key; }
 
-void tasmChecking::insertStoreBaseBoundFunc(Value *ptr, Value *base, Value *bound,
+void tasmChecking::insertStoreBaseBoundFunc(Value *ptr, Value *base,
+                                            Value *bound,
                                             Instruction *Inst_at) {}
-int tasmChecking::getPtrNumOfArgs(CallInst *Inst) {
-  return 1;
-}
-bool tasmChecking::hasPtrArgRetType(Function *func) {
-  return true;
-}
-bool tasmChecking::checkTypeHasPtrs(Argument *arg) {
-  return true;
-}
+int tasmChecking::getPtrNumOfArgs(CallInst *Inst) { return 1; }
+bool tasmChecking::hasPtrArgRetType(Function *func) { return true; }
+bool tasmChecking::checkTypeHasPtrs(Argument *arg) { return true; }
 /****************************************************************************************************************************************/
 bool tasmChecking::runOnModule(Module &module) {
 

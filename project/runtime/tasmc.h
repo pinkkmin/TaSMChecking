@@ -137,6 +137,15 @@ void* _f_safe_mmap(void* addr, size_t length, int prot, int flags, int fd, off_t
 void* _f_malloc(size_t size);
 void _f_free(void* ptr);
 
+extern  void _initTaSMC_ret();
+// 你也要初始化？
+extern void _initTaSMC();
+//好吧 全局初始化就是 初始化softboundcets 和 stub 
+void __tasmc_global_init()
+{
+  _initTaSMC();
+  _initTaSMC_ret();
+}
 
 /**  
  * pointerType: heap(000) stack(001) global(010) others(011)
