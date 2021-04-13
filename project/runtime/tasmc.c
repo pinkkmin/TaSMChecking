@@ -180,13 +180,13 @@ void _f_tasmcPrintf(const char* str, ...)
 // called by rumtime library main() function
 extern int _f_pseudoMain(int argc, char **argv);
 
-int test_main(int argc, char **argv){
+int main(int argc, char **argv){
 
   #if __WORDSIZE == 32
   exit(1);
   #endif
   int retValue;
   char** new_argv = argv;
- // retValue = _f_pseudoMain(argc, new_argv);
-  return 0;
+  retValue = _f_pseudoMain(argc, new_argv);
+  return retValue;
 }
