@@ -31,7 +31,8 @@
 // for trie table
 _tasmc_trie_entry** _trie_table;
 _tasmc_trie_entry* _trie_second_level;
-
+// function key pool
+size_t* _function_key_pool;
 //free able table for heap
 size_t* _free_able_table;
 
@@ -47,7 +48,7 @@ void _initTaSMC_ret(){
  * */
 void _initTaSMC(){
     
-    printf(" in initing function:initTaSMC\n");
+    //printf(" in initing function:initTaSMC\n");
     size_t triePrimaryLevelLength = _TRIE_PRIMARY_TABLE_N_ENTRIES * sizeof(_tasmc_trie_entry*);
     _trie_table = mmap(0, triePrimaryLevelLength, 
 					    PROT_READ| PROT_WRITE, 
@@ -84,6 +85,14 @@ void _initTaSMC(){
                                           PROT_READ| PROT_WRITE, 
                                           TaSMC_MMAP_FLAGS, -1, 0);
     assert(_free_able_table != (void*) -1);
+
+   size_t functionKeyPoolLen  = _FUNCTIONKEY_POOL_N_ITEMS * sizeof(size_t);
+  _function_key_pool = mmap(0, functionKeyPoolLen, 
+                                          PROT_READ| PROT_WRITE, 
+                                          TaSMC_MMAP_FLAGS, -1, 0);       
+  assert(_function_key_pool != (void*) -1);
+  
+   *(_function_key_pool) = 0; 
 }
 
 _tasmc_trie_entry* _f_trie_allocate(){
@@ -145,7 +154,13 @@ void _f_callAbort(int type) {
     case ERROR_VIRTUAL_ADDR:
         printf(stderr, "abort: virtual address error... ... \n");
         break;
-      
+    case ERROR_FUNCTION_POOL_OVERFLOW:
+        printf(stderr, "abort: tasmc initing abort... ... \n");
+        printf(stderr, "abort: tasmc function pools overflow... ... \n");
+        break;
+    case ERROR_FUNCTION_CALLING:
+        printf(stderr, "abort: tasmc function called error... ... \n");
+        break;
     case ERROR_POINTER_UNKNOW:
     default:
         printf(stderr, "abort: unknow error... ... \n");
@@ -191,7 +206,8 @@ int main(int argc, char **argv){
   #endif
   int retValue;
   char** new_argv = argv;
-  printf("debug: running in runtime library main()\n");
+  
+  //printf("debug: running in runtime library main()\n");
   retValue = _f_pseudoMain(argc, new_argv);
   return retValue;
 }

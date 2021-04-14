@@ -76,7 +76,9 @@ private:
   Function *m_f_typeCasePointer;
 
   // others function
-
+  Function *m_f_allocateFunctionKey;
+  Function *m_f_freeFunctionKey;
+  Function *m_f_initFunctionKeyPool;
   // ... ...
 public:
   static char ID;
@@ -107,6 +109,7 @@ public:
   void transformMainFunc(Module &);
   void identifyOriginalInst(Function *);
   bool isFuncDefTaSMC(const std::string &str); // 是否定义
+  Instruction* getGlobalInitInstruction(Module&);
   bool checkIfFunctionOfInterest(Function *);
   /* handler llvm ir functions */
   void handleAlloca(AllocaInst *, Value *, Value *, Value *, BasicBlock *,
@@ -277,6 +280,15 @@ void tasmChecking::constructPointerHandlers(Module &module) {
 
   // void* _f_typeCasePointer(void* ptr)
   module.getOrInsertFunction("_f_typeCasePointer", VoidPtrTy, VoidPtrTy);
+
+  // size_t _f_allocateFunctionKey(size_t functionId) 
+   module.getOrInsertFunction("_f_allocateFunctionKey", SizeTy, SizeTy);
+
+  // void _f_freeFunctionKey(size_t functionId)
+  module.getOrInsertFunction("_f_freeFunctionKey", VoidTy, SizeTy);
+
+  // void _f_initFunctionKeyPool(size_t functionNums)
+  module.getOrInsertFunction("_f_initFunctionKeyPool", VoidTy, SizeTy);
 }
 
 //
@@ -441,6 +453,15 @@ void tasmChecking::getPointerFunctions(Module &module) {
 
   m_f_typeCasePointer = module.getFunction("_f_typeCasePointer");
   assert(m_f_typeCasePointer && "m_f_typeCasePointer is NULL ? ");
+
+  m_f_allocateFunctionKey = module.getFunction("_f_allocateFunctionKey");
+  assert(m_f_allocateFunctionKey && "m_f_allocateFunctionKey is NULL ? ");
+
+  m_f_freeFunctionKey = module.getFunction("_f_freeFunctionKey");
+  assert(m_f_freeFunctionKey && "m_f_freeFunctionKey is NULL ? ");
+
+  m_f_initFunctionKeyPool = module.getFunction("_f_initFunctionKeyPool");
+  assert(m_f_initFunctionKeyPool && "m_f_initFunctionKeyPool is NULL ? ");
 }
 
 void tasmChecking::getOthersFunctions(Module &module) {}
@@ -564,6 +585,29 @@ bool tasmChecking::checkIfFunctionOfInterest(Function *func) {
     return false;
 
   return true;
+}
+
+Instruction* tasmChecking::getGlobalInitInstruction(Module& module){
+  Function* global_init_function = module.getFunction("__tasmc_global_init");    
+  assert(global_init_function && "no __tasmc_global_init function??");    
+  Instruction *global_init_terminator = NULL;
+  bool return_inst_flag = false;
+  for(Function::iterator fi = global_init_function->begin(), fe = global_init_function->end(); fi != fe; ++fi) {
+      
+    BasicBlock* bb = dyn_cast<BasicBlock>(fi);
+    assert(bb && "basic block null");
+    Instruction* bb_term = dyn_cast<Instruction>(bb->getTerminator());
+    assert(bb_term && "terminator null?");
+      
+    if(isa<ReturnInst>(bb_term)) {
+      assert((return_inst_flag == false) && "has multiple returns?");
+      return_inst_flag = true;
+      global_init_terminator = dyn_cast<ReturnInst>(bb_term);
+      assert(global_init_terminator && "return inst null?");
+    }
+  }
+  assert(global_init_terminator && "global init does not have return, strange");
+  return global_init_terminator;
 }
 /****************************************************************************************************************************************/
 /* associate functions */

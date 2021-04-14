@@ -25,6 +25,10 @@
 #define ERROR_OF_SPATIAL_SDC  23 // store dereference check
 #define ERROR_OF_TEMPORAL_LDC 24
 #define ERROR_OF_TEMPORAL_SDC 25
+
+#define ERROR_FUNCTION_POOL_OVERFLOW 30
+#define ERROR_FUNCTION_CALLING 31
+
 // for free able table 
 #define ERROR_FREE_TABLE_USE_UP 100
 #define ERROR_FREE_TABLE_CONFLICT 101

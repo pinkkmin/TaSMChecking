@@ -78,6 +78,9 @@ static const size_t _TRIE_SECONDARY_TABLE_N_ENTRIES = ((size_t) 4 * (size_t) 102
 static const size_t _BITS_OF_SIZET = sizeof(size_t)*8;
 static const size_t _ALIGN_BYTE_LOWER_BITS = 3; //低位3位字节对齐
 
+// functionKey Pool
+static const size_t _FUNCTIONKEY_POOL_N_ITEMS =  ((size_t)1024 * (size_t) 128);
+
 // 63 ~~~ 0: highter bit no use
 // 63~61: pointer type
 // 60~48：pointer key
@@ -102,7 +105,7 @@ void* _f_maskingPointer(void* ptr);
 // for trie table 
 extern _tasmc_trie_entry** _trie_table;
 extern _tasmc_trie_entry* _trie_second_level;
-
+extern size_t* _function_key_pool;
 // for free able table
 extern size_t* _free_able_table;
 size_t ptrKeyCounter = 0; // loop allocate：ptrKey
@@ -294,6 +297,32 @@ void* _f_cmpPointerAddr(void* ptrLhs, void* ptrRhs, int op){
 // type case
 void* _f_typeCasePointer(void* ptr) {
     return _f_maskingPointer(ptr);
+}
+
+size_t _f_allocateFunctionKey(size_t functionId) {
+     *(_function_key_pool + functionId) += 1;
+     size_t newFunctionKey = *(_function_key_pool + functionId);
+     assert((newFunctionKey >= 0xFFFFFFFFFFFFFFF) && "functionKey using up... ...");
+     return newFunctionKey;
+}
+
+void _f_freeFunctionKey(size_t functionId) {
+    size_t functionKey =  *(_function_key_pool + functionId);
+    if(functionKey <= 0) _f_callAbort(ERROR_FUNCTION_CALLING);
+
+    *(_function_key_pool + functionId) -= 1;
+}
+
+void _f_initFunctionKeyPool(size_t functionNums){
+    assert((_function_key_pool != (void*) -1) && "functionKey pool is NULL, dosen't init... ... ?");
+    if(functionNums >= _FUNCTIONKEY_POOL_N_ITEMS) {
+        _f_callAbort(ERROR_FUNCTION_POOL_OVERFLOW);         // call abort;
+    }
+
+    for(size_t id = 0; id < functionNums; id++) {
+        *(_function_key_pool + id) = 0;
+    }
+
 }
 /*******************************************************************************************************/
 
