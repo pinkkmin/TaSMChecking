@@ -1,0 +1,44 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/root/TaSMChecking/test/global-value/pass/module.cpp
+llvm/IR/GlobalValue.h
+/root/TaSMChecking/test/global-value/pass/llvm/IR/GlobalValue.h
+llvm/IR/IRBuilder.h
+/root/TaSMChecking/test/global-value/pass/llvm/IR/IRBuilder.h
+llvm/IR/LLVMContext.h
+/root/TaSMChecking/test/global-value/pass/llvm/IR/LLVMContext.h
+llvm/IR/LegacyPassManager.h
+/root/TaSMChecking/test/global-value/pass/llvm/IR/LegacyPassManager.h
+llvm/Transforms/IPO/PassManagerBuilder.h
+/root/TaSMChecking/test/global-value/pass/llvm/Transforms/IPO/PassManagerBuilder.h
+iostream
+-
+llvm/Analysis/AliasAnalysis.h
+-
+llvm/IR/Constants.h
+-
+llvm/IR/DerivedTypes.h
+-
+llvm/IR/Function.h
+-
+llvm/IR/InstIterator.h
+-
+llvm/IR/Instructions.h
+-
+llvm/IR/Module.h
+-
+llvm/IR/Operator.h
+-
+llvm/Pass.h
+-
+llvm/Support/raw_ostream.h
+-
+llvm/IR/DerivedTypes.h
+-
+

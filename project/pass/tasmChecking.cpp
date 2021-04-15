@@ -32,6 +32,8 @@ private:
   //
 
   StringMap<bool> m_func_def_tasmc;
+  size_t allocaFunctionId;
+  StringMap<size_t> m_function_pool;
   std::map<Value *, int> m_is_pointer;
   std::map<Value *, int> m_present_in_original;
   // for ty:stack
