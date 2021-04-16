@@ -59,12 +59,37 @@ bool GlobalPass::runOnModule(Module &M) {
     GlobalVariable *gv = dyn_cast<GlobalVariable>(it);
     errs() << gv->getName();
     Constant *initializer = dyn_cast<Constant>(it->getInitializer());
-    ConstantArray *constant_array = dyn_cast<ConstantArray>(initializer);
+    ConstantArray *constant_array = dyn_cast<ConstantArray>(it->getInitializer());
+    ConstantExpr* cexpr = dyn_cast<ConstantExpr>(initializer);
+    if(cexpr){
+      errs() << "  ConstantExpr";
+    }
     if (constant_array) {
       errs() << "  constant_array";
     }
+    if(!gv->hasInitializer())
+      continue;
+    if(!initializer) {
+      errs() <<"\n";
+      continue;
+    }
     if (isa<StructType>(initializer->getType())) {
-      errs() << "  StructType";
+      StructType *st =   dyn_cast<StructType>(initializer->getType());
+      errs() << "  StructType  ";
+       unsigned num_elements =st->getNumElements();
+       errs()<< num_elements;
+       for(unsigned i = 0; i < num_elements ; i++) {
+          Type* element_type = st->getTypeAtIndex(i); 
+          if(isa<PointerType>(element_type)){   
+              errs()<< " num_elements is ptr ";
+          }
+          if( ){
+            errs()<< " StructType ";
+          }
+          if(isa<ArrayType>(element_type)){
+            errs()<< " ArrayType ";
+          }
+       }
     }
     if (isa<PointerType>(initializer->getType())) {
       errs() << "  PointerType";
