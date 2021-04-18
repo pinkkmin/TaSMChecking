@@ -573,6 +573,7 @@ void tasmChecking::transformMainFunc(Module &module) {
   if (!mainFunc) {
     errs()<<"have not main() function... ...\n";
     
+    // need to do something.
     exit(1);
   }
 
@@ -714,6 +715,7 @@ void tasmChecking::getConstantExprBaseBound(Constant *given_constant,
       tmp_bound = gep_bound;
       errs() << "base: " << *tmp_base << "\n";
       errs() << "bound: " << *tmp_bound << "\n";
+      errs()<<"****************************************************\n";
     }
   }
 }
@@ -721,7 +723,7 @@ void tasmChecking::getConstantExprBaseBound(Constant *given_constant,
 void tasmChecking::handleGlobalArrayTypeInitializer(Module &module,
                                                     GlobalVariable *gv) {
   if (gv->getInitializer()->isNullValue()) {
-    errs() << "gv: array initializer is null.\n";
+    // errs() << "gv: array initializer is null.\n";
     return;
   }
 
@@ -789,7 +791,7 @@ void tasmChecking::handleGlobalArrayTypeInitializer(Module &module,
 
   if (isa<PointerType>(array_type->getElementType())) {
     // It is a array of pointers
-    errs() << "\n  array typre is pointer. \n";
+    // errs() << "\n  array typre is pointer. \n";
     size_t num_array_elements = array_type->getNumElements();
     Constant *const_array = dyn_cast<Constant>(gv->getInitializer());
     for (unsigned array_index = 0; array_index < num_array_elements;
@@ -872,21 +874,21 @@ void tasmChecking::addBaseBoundGlobals(Module &module) {
       continue;
     }
 
-    errs() << gv->getName();
+   // errs() << gv->getName();
     if (!gv->hasInitializer())
       continue;
 
     /* gv->hasInitializer() is true */
     Constant *initializer = dyn_cast<Constant>(it->getInitializer());
     if (!initializer) {
-      errs() << "\n";
+      //errs() << "\n";
       continue;
     }
     // handler strcutType
     if (isa<StructType>(initializer->getType())) {
       StructType *st = dyn_cast<StructType>(initializer->getType());
-      errs() << " is StructType \n";
-      errs() << "***************************************** \n";
+      // errs() << " is StructType \n";
+      // errs() << "***************************************** \n";
       std::vector<Constant *> indices_addr_ptr;
       Constant *index1 =
           ConstantInt::get(Type::getInt32Ty(module.getContext()), 0);
@@ -899,8 +901,8 @@ void tasmChecking::addBaseBoundGlobals(Module &module) {
     // handler poninterType : if & must be initing by
     // getelementptr/bitcast...to.../inttoptr
     if (isa<PointerType>(initializer->getType())) {
-      errs() << " is PointerType \n";
-      errs() << "***************************************** \n";
+      // errs() << " is PointerType \n";
+      // errs() << "***************************************** \n";
       Value *operand_base = NULL;
       Value *operand_bound = NULL;
       getConstantExprBaseBound(gv, operand_base, operand_bound);
@@ -908,8 +910,8 @@ void tasmChecking::addBaseBoundGlobals(Module &module) {
     }
 
     if (isa<ArrayType>(initializer->getType())) {
-      errs() << " is  ArrayType \n";
-      errs() << "***************************************** \n";
+      // errs() << " is  ArrayType \n";
+      // errs() << "***************************************** \n";
       handleGlobalArrayTypeInitializer(module, gv);
     }
   }
