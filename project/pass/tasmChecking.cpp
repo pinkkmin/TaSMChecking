@@ -29,6 +29,10 @@ private:
   Type *Int32Ty;
   Type *PtrOfVoidPtrTy;
   Type *PtrOfSizeTy;
+  Type *m_void_ptr_type;
+  ConstantPointerNull *m_void_null_ptr;
+  ConstantPointerNull *m_sizet_null_ptr;
+  Value *m_infinite_bound_ptr;
   //
 
   StringMap<bool> m_func_def_tasmc;
@@ -111,8 +115,9 @@ public:
   void transformMainFunc(Module &);
   void identifyOriginalInst(Function *);
   bool isFuncDefTaSMC(const std::string &str); // 是否定义
-  Instruction* getGlobalInitInstruction(Module&);
+  Instruction *getGlobalInitInstruction(Module &);
   bool checkIfFunctionOfInterest(Function *);
+  Value *getSizeOfType(Type *);
   /* handler llvm ir functions */
   void handleAlloca(AllocaInst *, Value *, Value *, Value *, BasicBlock *,
                     BasicBlock::iterator &);
@@ -142,6 +147,14 @@ public:
   void associateFunctionKey(Value *, Value *, Value *);
   void dissociateFuncitonKey(Value *);
   Value *getAssociatedFuncitonKey(Value *);
+  // for pointerType
+  void getConstantExprBaseBound(Constant *, Value *&, Value *&);
+  // for arrayType
+  void handleGlobalArrayTypeInitializer(Module &, GlobalVariable *);
+  // for StructType
+  void handleGlobalStructTypeInitializer(Module &, StructType *, Constant *,
+                                         GlobalVariable *,
+                                         std::vector<Constant *>, int);
   void addBaseBoundGlobals(Module &);
 
   void insertStoreBaseBoundFunc(Value *, Value *, Value *, Instruction *);
@@ -184,6 +197,17 @@ void tasmChecking::initTypeName(Module &module) {
   Int32Ty = Type::getInt32Ty(module.getContext());                  // int
   PtrOfVoidPtrTy = PointerType::getUnqual(VoidPtrTy);               // void**
   PtrOfSizeTy = PointerType::getUnqual(SizeTy);                     // size_t*
+
+  m_void_ptr_type =
+      PointerType::getUnqual(Type::getInt8Ty(module.getContext()));
+  PointerType *vptrty = dyn_cast<PointerType>(m_void_ptr_type);
+  m_void_null_ptr = ConstantPointerNull::get(vptrty);
+  size_t inf_bound = (size_t)pow(2, 48);
+  ConstantInt *infinite_bound =
+      ConstantInt::get(Type::getInt64Ty(module.getContext()), inf_bound, false);
+
+  m_infinite_bound_ptr =
+      ConstantExpr::getIntToPtr(infinite_bound, m_void_ptr_type);
 }
 
 /***
@@ -283,8 +307,8 @@ void tasmChecking::constructPointerHandlers(Module &module) {
   // void* _f_typeCasePointer(void* ptr)
   module.getOrInsertFunction("_f_typeCasePointer", VoidPtrTy, VoidPtrTy);
 
-  // size_t _f_allocateFunctionKey(size_t functionId) 
-   module.getOrInsertFunction("_f_allocateFunctionKey", SizeTy, SizeTy);
+  // size_t _f_allocateFunctionKey(size_t functionId)
+  module.getOrInsertFunction("_f_allocateFunctionKey", SizeTy, SizeTy);
 
   // void _f_freeFunctionKey(size_t functionId)
   module.getOrInsertFunction("_f_freeFunctionKey", VoidTy, SizeTy);
@@ -493,6 +517,51 @@ void tasmChecking::initializeVariables(Module &module) {
   getFunctions(module);
 }
 /****************************************************************************************************************************************/
+/**
+ *  Method: getSizeOfType
+ *  Description: This function returns the size of the memory access
+ *  based on the type of the pointer which is being dereferenced.  This
+ *  function is used to pass the size of the access in many checks to
+ * perform byte granularity checking.
+ *
+ * comments:coping by softboundcets,but it's east to code.
+ * link:
+ * https://stackoverflow.com/questions/14608250/how-can-i-find-the-size-of-a-type
+ */
+
+// 有问题
+Value *tasmChecking::getSizeOfType(Type *input_type) {
+  // Create a Constant Pointer Null of the input type.  Then get a
+  // getElementPtr of it with next element access cast it to unsigned
+  // int
+  const PointerType *ptr_type = dyn_cast<PointerType>(input_type);
+
+  if (isa<FunctionType>(ptr_type->getElementType())) {
+    return ConstantInt::get(Type::getInt64Ty(ptr_type->getContext()), 0);
+  }
+  Constant *int64_size = NULL;
+  StructType *struct_type = dyn_cast<StructType>(input_type);
+
+  if (struct_type) {
+    if (struct_type->isOpaque()) {
+      return ConstantInt::get(Type::getInt64Ty(input_type->getContext()), 0);
+    }
+    return ConstantExpr::getSizeOf(struct_type);
+  }
+
+  ArrayType *array_type = dyn_cast<ArrayType>(input_type);
+  if (array_type) {
+    if (!array_type->getElementType()->isSized()) {
+      return ConstantInt::get(Type::getInt64Ty(array_type->getContext()), 0);
+    }
+    int64_size = ConstantExpr::getSizeOf(input_type);
+    return int64_size;
+  }
+
+  int64_size = ConstantExpr::getSizeOf(input_type);
+  return int64_size;
+}
+
 void tasmChecking::scanfFirstPass(Function *func) {}
 void tasmChecking::scanfSecondPass(Function *func) {}
 void tasmChecking::insertDereferenceCheck(Function *func) {}
@@ -501,8 +570,11 @@ void tasmChecking::transformMainFunc(Module &module) {
   Function *mainFunc = module.getFunction("main");
   // errs()<<"transform main()\n";
   // doesn't have main then don't do anything
-  if (!mainFunc)
-    return;
+  if (!mainFunc) {
+    errs()<<"have not main() function... ...\n";
+    
+    exit(1);
+  }
 
   Type *retType = mainFunc->getReturnType();
   FunctionType *funcType = mainFunc->getFunctionType();
@@ -557,12 +629,235 @@ void tasmChecking::transformMainFunc(Module &module) {
   mainFunc->eraseFromParent();
 }
 void tasmChecking::identifyOriginalInst(Function *func) {}
+void tasmChecking::getConstantExprBaseBound(Constant *given_constant,
+                                            Value *&tmp_base,
+                                            Value *&tmp_bound) {
+  if (isa<ConstantPointerNull>(given_constant)) {
+    tmp_base = m_void_null_ptr;
+    tmp_bound = m_void_null_ptr;
+    return;
+  }
+  ConstantExpr *cexpr = dyn_cast<ConstantExpr>(given_constant);
+  tmp_base = NULL;
+  tmp_bound = NULL;
+  if (cexpr) {
+    assert(cexpr && "ConstantExpr and Value* is null??");
+    switch (cexpr->getOpcode()) {
 
+    case Instruction::GetElementPtr: {
+      Constant *internal_constant = dyn_cast<Constant>(cexpr->getOperand(0));
+      getConstantExprBaseBound(internal_constant, tmp_base, tmp_bound);
+      break;
+    }
+
+    case BitCastInst::BitCast: {
+      Constant *internal_constant = dyn_cast<Constant>(cexpr->getOperand(0));
+      getConstantExprBaseBound(internal_constant, tmp_base, tmp_bound);
+      break;
+    }
+    case Instruction::IntToPtr: {
+      tmp_base = m_void_null_ptr;
+      tmp_bound = m_void_null_ptr;
+      return;
+      break;
+    }
+    default: {
+      break;
+    }
+    } // Switch ends
+  } else {
+    Value *cexpr_ = given_constant->getOperand(0);
+
+    if (isa<ConstantExpr>(cexpr_)) {
+      Constant *gv_ = dyn_cast<Constant>(cexpr_);
+      getConstantExprBaseBound(gv_, tmp_base, tmp_bound);
+    } else {
+      const PointerType *func_ptr_type =
+          dyn_cast<PointerType>(given_constant->getType());
+
+      if (isa<FunctionType>(func_ptr_type->getElementType())) {
+        tmp_base = m_void_null_ptr;
+        tmp_bound = m_infinite_bound_ptr;
+        return;
+      }
+      // Create getElementPtrs to create the base and bound
+
+      std::vector<Constant *> indices_base;
+      std::vector<Constant *> indices_bound;
+
+      GlobalVariable *gv = dyn_cast<GlobalVariable>(given_constant);
+
+      // TODO: External globals get zero base and infinite_bound
+      if (gv && !gv->hasInitializer()) {
+        tmp_base = m_void_null_ptr;
+        tmp_bound = m_infinite_bound_ptr;
+        return;
+      }
+
+      Constant *index_base0 = Constant::getNullValue(
+          Type::getInt32Ty(given_constant->getType()->getContext()));
+      // Constructor to create a '0' constant
+      Constant *index_bound0 = ConstantInt::get(
+          Type::getInt32Ty(given_constant->getType()->getContext()), 1);
+      indices_base.push_back(index_base0);
+
+      // indices_bound.push_back(index_base0);
+      // indices_bound.push_back(index_bound1);
+      indices_bound.push_back(index_bound0);
+
+      Constant *gep_base =
+          ConstantExpr::getGetElementPtr(nullptr, given_constant, indices_base);
+      Constant *gep_bound = ConstantExpr::getGetElementPtr(
+          nullptr, given_constant, indices_bound);
+
+      tmp_base = gep_base;
+      tmp_bound = gep_bound;
+      errs() << "base: " << *tmp_base << "\n";
+      errs() << "bound: " << *tmp_bound << "\n";
+    }
+  }
+}
+
+void tasmChecking::handleGlobalArrayTypeInitializer(Module &module,
+                                                    GlobalVariable *gv) {
+  if (gv->getInitializer()->isNullValue()) {
+    errs() << "gv: array initializer is null.\n";
+    return;
+  }
+
+  Constant *initializer = dyn_cast<Constant>(gv->getInitializer());
+  const ArrayType *array_type = dyn_cast<ArrayType>(initializer->getType());
+
+  if (isa<StructType>(array_type->getElementType())) {
+    // It is an array of structures
+    // Check whether the structure has a pointer, if it has a
+    // pointer then, we need to store the base and bound of the
+    // pointer into the metadata space. However, if the structure
+    // does not have any pointer, we exit.
+
+    StructType *init_struct_type =
+        dyn_cast<StructType>(array_type->getElementType());
+
+    assert(init_struct_type && "Array of structures and struct type null?");
+
+    bool struct_has_pointers = false;
+    unsigned num_struct_elements = init_struct_type->getNumElements();
+    for (unsigned i = 0; i < num_struct_elements; i++) {
+      Type *element_type = init_struct_type->getTypeAtIndex(i);
+      if (isa<PointerType>(element_type)) {
+        struct_has_pointers = true;
+        break;
+      }
+    }
+
+    if (!struct_has_pointers)
+      return;
+
+    size_t num_array_elements = array_type->getNumElements();
+    Constant *const_array = dyn_cast<Constant>(gv->getInitializer());
+    if (!const_array) {
+      // errs() << " not ConstantArray \n";
+      return;
+    }
+    for (unsigned array_index = 0; array_index < num_array_elements;
+         array_index++) {
+      Constant *struct_constant =
+          dyn_cast<Constant>(const_array->getOperand(array_index));
+      assert(struct_constant &&
+             "Initializer structure type but not a constant?");
+      if (struct_constant->isNullValue())
+        continue;
+      for (unsigned struct_index = 0; struct_index < num_struct_elements;
+           struct_index++) {
+        const Type *element_type =
+            init_struct_type->getTypeAtIndex(struct_index);
+
+        // in  struct, we only care the element of pointerType.
+        if (isa<PointerType>(element_type)) {
+          Value *operand_base = NULL;
+          Value *operand_bound = NULL;
+
+          Constant *child_gv =
+              dyn_cast<Constant>(struct_constant->getOperand(struct_index));
+          getConstantExprBaseBound(child_gv, operand_base, operand_bound);
+        }
+        // else we don't care.
+
+      } // Iterating over struct element ends
+    }   // Iterating over array element ends
+  }     // Array of Structures Ends
+
+  if (isa<PointerType>(array_type->getElementType())) {
+    // It is a array of pointers
+    errs() << "\n  array typre is pointer. \n";
+    size_t num_array_elements = array_type->getNumElements();
+    Constant *const_array = dyn_cast<Constant>(gv->getInitializer());
+    for (unsigned array_index = 0; array_index < num_array_elements;
+         array_index++) {
+      Constant *pointer_constant =
+          dyn_cast<Constant>(const_array->getOperand(array_index));
+      Value *operand_base = NULL;
+      Value *operand_bound = NULL;
+      getConstantExprBaseBound(pointer_constant, operand_base, operand_bound);
+    }
+  }
+
+  // else others: i don't care that.
+}
+void tasmChecking::handleGlobalStructTypeInitializer(
+    Module &module, StructType *init_struct_type, Constant *initializer,
+    GlobalVariable *gv, std::vector<Constant *> indices_addr_ptr, int length) {
+  /* is StrcutType  has zero initializer */
+  if (initializer->isNullValue())
+    return;
+
+  Constant *constant = dyn_cast<Constant>(initializer);
+  assert(constant &&
+         "[handleGlobalStructTypeInit] global stype with init but not CA?");
+
+  unsigned num_elements = init_struct_type->getNumElements();
+  for (unsigned index = 0; index < num_elements; index++) {
+    Type *element_type = init_struct_type->getTypeAtIndex(index);
+
+    if (isa<StructType>(element_type)) {
+
+      StructType *child_element_type = dyn_cast<StructType>(element_type);
+      Constant *child_struct_initializer =
+          dyn_cast<Constant>(constant->getOperand(index));
+      Constant *index2 =
+          ConstantInt::get(Type::getInt32Ty(module.getContext()), index);
+      indices_addr_ptr.push_back(index2);
+      length++;
+      handleGlobalStructTypeInitializer(module, child_element_type,
+                                        child_struct_initializer, gv,
+                                        indices_addr_ptr, length);
+      indices_addr_ptr.pop_back();
+      length--;
+      continue;
+    }
+
+    if (isa<ArrayType>(element_type)) {
+
+      GlobalVariable *child_gv =
+          dyn_cast<GlobalVariable>(constant->getOperand(index));
+      if (child_gv)
+        handleGlobalArrayTypeInitializer(module, gv);
+      continue;
+    }
+
+    if (isa<PointerType>(element_type)) {
+
+      Value *operand_base = NULL;
+      Value *operand_bound = NULL;
+      Constant *child_gv = dyn_cast<Constant>(constant->getOperand(index));
+      getConstantExprBaseBound(child_gv, operand_base, operand_bound);
+    }
+  }
+}
 void tasmChecking::addBaseBoundGlobals(Module &module) {
   for (Module::global_iterator it = module.global_begin(),
-                               it_end = module.global_end();
-       it != it_end; ++it) {
-
+                               ite = module.global_end();
+       it != ite; ++it) {
     GlobalVariable *gv = dyn_cast<GlobalVariable>(it);
 
     if (!gv) {
@@ -575,6 +870,47 @@ void tasmChecking::addBaseBoundGlobals(Module &module) {
 
     if (gv->getName() == "llvm.global_ctors") {
       continue;
+    }
+
+    errs() << gv->getName();
+    if (!gv->hasInitializer())
+      continue;
+
+    /* gv->hasInitializer() is true */
+    Constant *initializer = dyn_cast<Constant>(it->getInitializer());
+    if (!initializer) {
+      errs() << "\n";
+      continue;
+    }
+    // handler strcutType
+    if (isa<StructType>(initializer->getType())) {
+      StructType *st = dyn_cast<StructType>(initializer->getType());
+      errs() << " is StructType \n";
+      errs() << "***************************************** \n";
+      std::vector<Constant *> indices_addr_ptr;
+      Constant *index1 =
+          ConstantInt::get(Type::getInt32Ty(module.getContext()), 0);
+      indices_addr_ptr.push_back(index1);
+      handleGlobalStructTypeInitializer(module, st, initializer, gv,
+                                        indices_addr_ptr, 1);
+      continue;
+    }
+
+    // handler poninterType : if & must be initing by
+    // getelementptr/bitcast...to.../inttoptr
+    if (isa<PointerType>(initializer->getType())) {
+      errs() << " is PointerType \n";
+      errs() << "***************************************** \n";
+      Value *operand_base = NULL;
+      Value *operand_bound = NULL;
+      getConstantExprBaseBound(gv, operand_base, operand_bound);
+      continue;
+    }
+
+    if (isa<ArrayType>(initializer->getType())) {
+      errs() << " is  ArrayType \n";
+      errs() << "***************************************** \n";
+      handleGlobalArrayTypeInitializer(module, gv);
     }
   }
 }
@@ -589,19 +925,21 @@ bool tasmChecking::checkIfFunctionOfInterest(Function *func) {
   return true;
 }
 
-Instruction* tasmChecking::getGlobalInitInstruction(Module& module){
-  Function* global_init_function = module.getFunction("__tasmc_global_init");    
-  assert(global_init_function && "no __tasmc_global_init function??");    
+Instruction *tasmChecking::getGlobalInitInstruction(Module &module) {
+  Function *global_init_function = module.getFunction("__tasmc_global_init");
+  assert(global_init_function && "no __tasmc_global_init function??");
   Instruction *global_init_terminator = NULL;
   bool return_inst_flag = false;
-  for(Function::iterator fi = global_init_function->begin(), fe = global_init_function->end(); fi != fe; ++fi) {
-      
-    BasicBlock* bb = dyn_cast<BasicBlock>(fi);
+  for (Function::iterator fi = global_init_function->begin(),
+                          fe = global_init_function->end();
+       fi != fe; ++fi) {
+
+    BasicBlock *bb = dyn_cast<BasicBlock>(fi);
     assert(bb && "basic block null");
-    Instruction* bb_term = dyn_cast<Instruction>(bb->getTerminator());
+    Instruction *bb_term = dyn_cast<Instruction>(bb->getTerminator());
     assert(bb_term && "terminator null?");
-      
-    if(isa<ReturnInst>(bb_term)) {
+
+    if (isa<ReturnInst>(bb_term)) {
       assert((return_inst_flag == false) && "has multiple returns?");
       return_inst_flag = true;
       global_init_terminator = dyn_cast<ReturnInst>(bb_term);
@@ -634,6 +972,7 @@ bool tasmChecking::runOnModule(Module &module) {
   initializeVariables(module);
 
   // transform main() to _f_pseudoMain()
+  Function *mainFunc = module.getFunction("main");
   transformMainFunc(module);
 
   addBaseBoundGlobals(module);

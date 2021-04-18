@@ -90,7 +90,7 @@ void _initTaSMC(){
   _function_key_pool = mmap(0, functionKeyPoolLen, 
                                           PROT_READ| PROT_WRITE, 
                                           TaSMC_MMAP_FLAGS, -1, 0);       
-  assert(_function_key_pool != (void*) -1);
+    
   
    *(_function_key_pool) = 0; 
 }

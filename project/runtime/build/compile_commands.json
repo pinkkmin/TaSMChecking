@@ -1,0 +1,7 @@
+[
+{
+  "directory": "/root/TaSMChecking/project/runtime/build",
+  "command": "/usr/bin/cc  -I/root/TaSMChecking/project/runtime/.  -g   -Wall -pedantic -o CMakeFiles/tasmc_rt.dir/tasmc.c.o   -c /root/TaSMChecking/project/runtime/tasmc.c",
+  "file": "/root/TaSMChecking/project/runtime/tasmc.c"
+}
+]
