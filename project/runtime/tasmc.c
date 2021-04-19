@@ -207,7 +207,7 @@ int main(int argc, char **argv){
   int retValue;
   char** new_argv = argv;
   
-  //printf("debug: running in runtime library main()\n");
+  printf("debug: running in runtime library main()\n");
   retValue = _f_pseudoMain(argc, new_argv);
   return retValue;
 }

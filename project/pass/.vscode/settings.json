@@ -5,6 +5,7 @@
         "memory": "cpp",
         "type_traits": "cpp",
         "*.tcc": "cpp",
-        "istream": "cpp"
+        "istream": "cpp",
+        "iostream": "cpp"
     }
 }

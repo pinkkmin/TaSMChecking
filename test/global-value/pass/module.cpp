@@ -252,7 +252,7 @@ void GlobalPass::handleGlobalStructTypeInitializer(Module &module,
   for (unsigned index = 0; index < num_elements; index++) {
     Type *element_type = init_struct_type->getTypeAtIndex(index);
 
-    if (isa<StructType>(element_type)) {  
+    if (isa<StructType>(element_type)) {
 
       StructType *child_element_type = dyn_cast<StructType>(element_type);
       Constant *child_struct_initializer =
@@ -278,6 +278,8 @@ void GlobalPass::handleGlobalStructTypeInitializer(Module &module,
       Value *operand_bound = NULL;
       Constant *child_gv = dyn_cast<Constant>(constant->getOperand(index));
       getConstantExprBaseBound(child_gv, operand_base, operand_bound);
+      Value *cast_bitcast = new BitCastInst(gv, m_void_ptr_type, "bitcast");
+      errs() << *cast_bitcast << "\n";
     }
   }
 }
@@ -334,6 +336,9 @@ bool GlobalPass::runOnModule(Module &M) {
       Value *operand_base = NULL;
       Value *operand_bound = NULL;
       getConstantExprBaseBound(gv, operand_base, operand_bound);
+      Value *cast_bitcast = new BitCastInst(gv, m_void_ptr_type, "bitcast");
+      errs() << *gv << "\n";
+      errs() << *cast_bitcast << "\n";
     }
 
     if (isa<ArrayType>(initializer->getType())) {

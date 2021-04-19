@@ -7,6 +7,12 @@
 #IncludeRegexTransform: 
 
 /root/TaSMChecking/project/pass/tasmChecking.cpp
+algorithm
+-
+iostream
+-
+llvm/ADT/StringMap.h
+-
 llvm/Analysis/AliasAnalysis.h
 -
 llvm/IR/CallingConv.h
@@ -15,9 +21,15 @@ llvm/IR/Constants.h
 -
 llvm/IR/Function.h
 -
+llvm/IR/IRBuilder.h
+-
 llvm/IR/InstIterator.h
 -
 llvm/IR/Instructions.h
+-
+llvm/IR/LLVMContext.h
+-
+llvm/IR/LegacyPassManager.h
 -
 llvm/IR/Module.h
 -
@@ -26,16 +38,6 @@ llvm/IR/Operator.h
 llvm/Pass.h
 -
 llvm/Support/raw_ostream.h
--
-iostream
--
-llvm/ADT/StringMap.h
--
-llvm/IR/IRBuilder.h
--
-llvm/IR/LLVMContext.h
--
-llvm/IR/LegacyPassManager.h
 -
 llvm/Transforms/IPO/PassManagerBuilder.h
 -

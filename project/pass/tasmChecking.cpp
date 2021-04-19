@@ -1,19 +1,19 @@
+#include <algorithm>
+#include <iostream>
+#include <llvm/ADT/StringMap.h>
 #include <llvm/Analysis/AliasAnalysis.h>
 #include <llvm/IR/CallingConv.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Function.h>
+#include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/InstIterator.h>
 #include <llvm/IR/Instructions.h>
+#include <llvm/IR/LLVMContext.h>
+#include <llvm/IR/LegacyPassManager.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Operator.h>
 #include <llvm/Pass.h>
 #include <llvm/Support/raw_ostream.h>
-
-#include <iostream>
-#include <llvm/ADT/StringMap.h>
-#include <llvm/IR/IRBuilder.h>
-#include <llvm/IR/LLVMContext.h>
-#include <llvm/IR/LegacyPassManager.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 using namespace llvm;
 
@@ -115,9 +115,7 @@ public:
   void transformMainFunc(Module &);
   void identifyOriginalInst(Function *);
   bool isFuncDefTaSMC(const std::string &str); // 是否定义
-  Instruction *getGlobalInitInstruction(Module &);
   bool checkIfFunctionOfInterest(Function *);
-  Value *getSizeOfType(Type *);
   /* handler llvm ir functions */
   void handleAlloca(AllocaInst *, Value *, Value *, Value *, BasicBlock *,
                     BasicBlock::iterator &);
@@ -157,11 +155,15 @@ public:
                                          std::vector<Constant *>, int);
   void addBaseBoundGlobals(Module &);
 
+  // called function: m_f_storeMetaData
   void insertStoreBaseBoundFunc(Value *, Value *, Value *, Instruction *);
-  int getPtrNumOfArgs(
-      CallInst *); // get count of pointer from args（and return）
+  // get count of pointer from args（and return）
+  int getPtrNumOfArgs(CallInst *);
   bool hasPtrArgRetType(Function *);
   bool checkTypeHasPtrs(Argument *);
+  Value *getSizeOfType(Type *);                    // yes
+  Value *castToVoidPtr(Value *, Instruction *);    // yes
+  Instruction *getGlobalInitInstruction(Module &); // yes
 };
 } // namespace
 
@@ -184,7 +186,6 @@ static RegisterStandardPasses
 static RegisterStandardPasses
     RegistertasmCheckingPass1(PassManagerBuilder::EP_EnabledOnOptLevel0,
                               registertasmCheckingPass);
-
 /**************************************************************************************************************************/
 /** rename some types
  * */
@@ -571,8 +572,8 @@ void tasmChecking::transformMainFunc(Module &module) {
   // errs()<<"transform main()\n";
   // doesn't have main then don't do anything
   if (!mainFunc) {
-    errs()<<"have not main() function... ...\n";
-    
+    errs() << "have not main() function... ...\n";
+
     // need to do something.
     exit(1);
   }
@@ -713,9 +714,10 @@ void tasmChecking::getConstantExprBaseBound(Constant *given_constant,
 
       tmp_base = gep_base;
       tmp_bound = gep_bound;
+      errs() << "\n****************************************************\n";
       errs() << "base: " << *tmp_base << "\n";
       errs() << "bound: " << *tmp_bound << "\n";
-      errs()<<"****************************************************\n";
+      errs() << "****************************************************\n";
     }
   }
 }
@@ -874,14 +876,14 @@ void tasmChecking::addBaseBoundGlobals(Module &module) {
       continue;
     }
 
-   // errs() << gv->getName();
+    // errs() << gv->getName();
     if (!gv->hasInitializer())
       continue;
 
     /* gv->hasInitializer() is true */
     Constant *initializer = dyn_cast<Constant>(it->getInitializer());
     if (!initializer) {
-      //errs() << "\n";
+      // errs() << "\n";
       continue;
     }
     // handler strcutType
@@ -906,6 +908,9 @@ void tasmChecking::addBaseBoundGlobals(Module &module) {
       Value *operand_base = NULL;
       Value *operand_bound = NULL;
       getConstantExprBaseBound(gv, operand_base, operand_bound);
+      Instruction *init_gv_inst = getGlobalInitInstruction(module);
+      insertStoreBaseBoundFunc(gv, operand_base, operand_bound, init_gv_inst);
+
       continue;
     }
 
@@ -927,6 +932,8 @@ bool tasmChecking::checkIfFunctionOfInterest(Function *func) {
   return true;
 }
 
+// copy by softboundcets
+// get inst:global init inst
 Instruction *tasmChecking::getGlobalInitInstruction(Module &module) {
   Function *global_init_function = module.getFunction("__tasmc_global_init");
   assert(global_init_function && "no __tasmc_global_init function??");
@@ -961,12 +968,54 @@ void tasmChecking::associateFunctionKey(Value *key, Value *key1, Value *key2) {}
 void tasmChecking::dissociateFuncitonKey(Value *key) {}
 Value *tasmChecking::getAssociatedFuncitonKey(Value *key) { return key; }
 
-void tasmChecking::insertStoreBaseBoundFunc(Value *ptr, Value *base,
+/** Description:
+ * called function: m_f_storeMetaData
+ *  _f_storeMetaData(void* addr_of_ptr, void* base, void* bound)
+ *  Inputs:
+ *  base,bound : associated with the pointer being stored
+ *  insert_at: the insertion point in the bitcode before which the
+ *  metadata store is introduced.
+ * */
+void tasmChecking::insertStoreBaseBoundFunc(Value *addr_of_ptr, Value *base,
                                             Value *bound,
-                                            Instruction *Inst_at) {}
+                                            Instruction *insert_at) {
+
+  Value *pointer_base_cast = NULL;
+  Value *pointer_bound_cast = NULL;
+
+  Value *pointer_dest_cast = castToVoidPtr(addr_of_ptr, insert_at);
+  pointer_base_cast = castToVoidPtr(base, insert_at);
+  pointer_bound_cast = castToVoidPtr(bound, insert_at);
+
+  SmallVector<Value *, 8> args;
+
+  args.push_back(pointer_dest_cast);
+  args.push_back(pointer_base_cast);
+  args.push_back(pointer_bound_cast);
+
+  CallInst::Create(m_f_storeMetaData, args, "", insert_at);
+}
+
 int tasmChecking::getPtrNumOfArgs(CallInst *Inst) { return 1; }
 bool tasmChecking::hasPtrArgRetType(Function *func) { return true; }
 bool tasmChecking::checkTypeHasPtrs(Argument *arg) { return true; }
+
+// copy by softboundcets
+// Method: castToVoidPtr()
+//
+// Description:
+//
+// This function introduces a bitcast instruction in the IR when an
+// input operand that is a pointer type is not of type i8*. This is
+// required as all the SoftBound/CETS handlers take i8*s
+Value *tasmChecking::castToVoidPtr(Value *operand, Instruction *insert_at) {
+  Value *cast_bitcast = operand;
+  if (operand->getType() != m_void_ptr_type) {
+    cast_bitcast =
+        new BitCastInst(operand, m_void_ptr_type, "bitcast", insert_at);
+  }
+  return cast_bitcast;
+}
 /****************************************************************************************************************************************/
 bool tasmChecking::runOnModule(Module &module) {
 
@@ -974,11 +1023,9 @@ bool tasmChecking::runOnModule(Module &module) {
   initializeVariables(module);
 
   // transform main() to _f_pseudoMain()
-  Function *mainFunc = module.getFunction("main");
-  transformMainFunc(module);
-
-  addBaseBoundGlobals(module);
-
+  
+     transformMainFunc(module);
+   addBaseBoundGlobals(module);
   for (Module::iterator ff_begin = module.begin(), ff_end = module.end();
        ff_begin != ff_end; ++ff_begin) {
     Function *func_ptr = dyn_cast<Function>(ff_begin);
