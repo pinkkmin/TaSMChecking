@@ -11,5 +11,8 @@ void test(){
 }
 int main(){
  printf("hello main()\n");
+
+ printf("ptr:%zu,\tbase: %zu,\tbound : %zu,\taddr_of_ptr:%zu\n",(size_t)ptr,(size_t)array,(size_t)(array+100),(size_t)(&ptr));
+
  return 0;
 }

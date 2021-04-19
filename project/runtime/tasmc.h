@@ -377,7 +377,10 @@ void _f_storeMetaData(void* addr_of_ptr, void* base, void* bound){
 
     // printf("*******************************************\n");
     // printf("bound: %zx\n", (size_t)bound);
-    // printf("entry->bound: %zx\n", (size_t)entry->bound);
+    // debug output info:
+    int* ptr = *((int**)addr_of_ptr);
+    printf("【tasmc debug】 ptr: %zu,\t base: %zu,\tbound : %zu,\taddr_of_ptr:%zu \n", (size_t)ptr,(size_t)entry->base,(size_t)entry->bound,(size_t)addr_of_ptr);
+    
     // printf("*******************************************\n");
 
 } 
