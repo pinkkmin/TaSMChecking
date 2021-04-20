@@ -13,9 +13,13 @@ target triple = "x86_64-unknown-linux-gnu"
 @ptr_to_const_null = dso_local global i32* null, align 8
 
 ; Function Attrs: noinline nounwind optnone uwtable
-define dso_local void @test() #0 {
-  %1 = load i32*, i32** getelementptr inbounds ([10 x i32*], [10 x i32*]* @ptr_array, i64 1, i64 2), align 16
-  store i32 12, i32* %1, align 4
+define dso_local void @test(i32 %0, i32* %1) #0 {
+  %3 = alloca i32, align 4
+  %4 = alloca i32*, align 8
+  store i32 %0, i32* %3, align 4
+  store i32* %1, i32** %4, align 8
+  %5 = load i32*, i32** getelementptr inbounds ([10 x i32*], [10 x i32*]* @ptr_array, i64 1, i64 2), align 16
+  store i32 12, i32* %5, align 4
   ret void
 }
 

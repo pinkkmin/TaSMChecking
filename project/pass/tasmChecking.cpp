@@ -64,6 +64,8 @@ private:
 
   // shadow-stack function
   Function *m_f_loadBaseOfShadowStack;
+  Function *m_f_storeBaseOfShadowStack;
+  Function *m_f_loadBoundOfShadowStack;
   Function *m_f_storeBoundOfShadowStack;
   Function *m_f_allocateShadowStackMetadata;
   Function *m_f_deallocateShadowStackMetaData;
@@ -93,6 +95,7 @@ public:
   tasmChecking() : ModulePass(ID) {}
   bool runOnModule(Module &) override;
   ///////////////////////////////////////////////////////////////////////////////////////////
+  // init function
   void initializeVariables(Module &);
   void initTypeName(Module &);
   /* insert function from library. */
@@ -110,19 +113,20 @@ public:
   void getOthersFunctions(Module &);
   void getFunctions(Module &);
 
-  /* helper functions  */
+  /* gather info functions  */
   void scanfFirstPass(Function *);
   void scanfSecondPass(Function *);
   void insertDereferenceCheck(Function *);
-  void transformMainFunc(Module &);
-  void identifyOriginalInst(Function *);
+
+  void transformMainFunc(Module &);            // yes
+  void identifyOriginalInst(Function *);       // yes
   bool isFuncDefTaSMC(const std::string &str); // yes 是否定义
-  bool checkIfFunctionOfInterest(Function *);
+  bool checkIfFunctionOfInterest(Function *);  // yes
+  void insertMetadataLoad(LoadInst *);
+
   /* handler llvm ir functions */
   void handleAlloca(AllocaInst *, Value *, Value *, Value *, BasicBlock *,
                     BasicBlock::iterator &);
-
-  void insertMetadataLoad(LoadInst *);
   void handleLoad(LoadInst *);
   void handleVectorStore(StoreInst *);
   void handleStore(StoreInst *);
@@ -147,6 +151,9 @@ public:
   void associateFunctionKey(Value *, Value *, Value *);
   void dissociateFuncitonKey(Value *);
   Value *getAssociatedFuncitonKey(Value *);
+
+  /** for global */
+  void addBaseBoundGlobals(Module &);
   // for pointerType
   void getConstantExprBaseBound(Constant *, Value *&, Value *&);
   // for arrayType
@@ -155,14 +162,21 @@ public:
   void handleGlobalStructTypeInitializer(Module &, StructType *, Constant *,
                                          GlobalVariable *,
                                          std::vector<Constant *>, int);
-  void addBaseBoundGlobals(Module &);
 
   // called function: m_f_storeMetaData
   void insertStoreBaseBoundFunc(Value *, Value *, Value *, Instruction *);
+
+  // for shadow stack
+  void insertShadowStackLoads(Value *, Instruction *, int);
+  void insertShadowStackAllocation(CallInst *);
+  void insertShadowStackStores(Value *, Instruction *, int);
+
+  // help functions
   // get count of pointer from args（and return）
   int getPtrNumOfArgs(CallInst *);
   bool hasPtrArgRetType(Function *);
   bool checkTypeHasPtrs(Argument *);
+  bool checkStructHasPtrs(StructType *);
   Value *getSizeOfType(Type *);                    // yes
   Value *castToVoidPtr(Value *, Instruction *);    // yes
   Instruction *getGlobalInitInstruction(Module &); // yes
@@ -258,9 +272,15 @@ void tasmChecking::constructShadowStackHandlers(Module &module) {
 
   // void* _f_loadBaseOfShadowStack(int args_no)
   module.getOrInsertFunction("_f_loadBaseOfShadowStack", VoidPtrTy, Int32Ty);
+  
+  // void* _f_storeBaseOfShadowStack(int args_no)
+  module.getOrInsertFunction("_f_storeBaseOfShadowStack", VoidPtrTy, Int32Ty);
 
   // void* _f_storeBoundOfShadowStack(int args_no)
   module.getOrInsertFunction("_f_storeBoundOfShadowStack", VoidPtrTy, Int32Ty);
+  
+  // void* _f_loadBoundOfShadowStack(int args_no)
+  module.getOrInsertFunction("_f_loadBoundOfShadowStack", VoidPtrTy, Int32Ty);
 
   // void _f_allocateShadowStackMetadata(size_t args_no)
   module.getOrInsertFunction("_f_allocateShadowStackMetadata", VoidPtrTy,
@@ -429,6 +449,12 @@ void tasmChecking::getShadowStackFunctions(Module &module) {
   m_f_loadBaseOfShadowStack = module.getFunction("_f_loadBaseOfShadowStack");
   assert(m_f_loadBaseOfShadowStack && "m_f_loadBaseOfShadowStack is NULL ? ");
 
+  m_f_storeBaseOfShadowStack = module.getFunction("_f_storeBaseOfShadowStack");
+  assert(m_f_storeBaseOfShadowStack && "m_f_storeBaseOfShadowStack is NULL ? ");
+
+  m_f_loadBoundOfShadowStack = module.getFunction("_f_loadBoundOfShadowStack");
+  assert(m_f_loadBoundOfShadowStack && "m_f_loadBoundOfShadowStack is NULL ? ");
+
   m_f_storeBoundOfShadowStack =
       module.getFunction("_f_storeBoundOfShadowStack");
   assert(m_f_storeBoundOfShadowStack &&
@@ -567,9 +593,51 @@ Value *tasmChecking::getSizeOfType(Type *input_type) {
   return int64_size;
 }
 
-void tasmChecking::scanfFirstPass(Function *func) {}
-void tasmChecking::scanfSecondPass(Function *func) {}
-void tasmChecking::insertDereferenceCheck(Function *func) {}
+/**
+ *
+ *
+ *
+ *
+ */
+void tasmChecking::scanfFirstPass(Function *func) {
+
+  int arg_count = 0;
+
+  /* Scan over the pointer arguments and introduce base and bound */
+
+  for (Function::arg_iterator ib = func->arg_begin(), ie = func->arg_end();
+       ib != ie; ++ib) {
+
+    if (!isa<PointerType>(ib->getType())) {
+      continue;
+    }
+
+    /* it's' a pointer, so increment the arg count */
+    arg_count++;
+    Argument *ptr_argument = dyn_cast<Argument>(ib);
+    Value *ptr_argument_value = ptr_argument;
+    Instruction *fst_inst = &*(func->begin()->begin());
+    if (ptr_argument->hasByValAttr()) {
+      if (checkTypeHasPtrs(ptr_argument)) {
+        assert(0 && "Pointer argument has byval attributes and the underlying "
+                    "structure returns pointers");
+      }
+
+      // todo: insert associate base and bound
+    } else {
+      insertShadowStackLoads(ptr_argument_value, fst_inst, arg_count);
+    }
+  }
+}
+
+void tasmChecking::scanfSecondPass(Function *func) {
+
+  // do nothing.
+}
+
+void tasmChecking::insertDereferenceCheck(Function *func) {
+  // do nothing.
+}
 void tasmChecking::transformMainFunc(Module &module) {
 
   Function *mainFunc = module.getFunction("main");
@@ -634,7 +702,35 @@ void tasmChecking::transformMainFunc(Module &module) {
   // remove old main function
   mainFunc->eraseFromParent();
 }
-void tasmChecking::identifyOriginalInst(Function *func) {}
+
+/**
+ *
+ * Method：identifyOriginalInst
+ * description：identify Original instruction，because we will create new
+ * [Inst]during run pass.
+ * so, need to distinguish between the original Inst, new Inst.
+ * ref：softboundcets
+ */
+void tasmChecking::identifyOriginalInst(Function *func) {
+
+  // Traverse all Inst
+  for (Function::iterator bb_begin = func->begin(), bb_end = func->end();
+       bb_begin != bb_end; ++bb_begin) {
+
+    for (BasicBlock::iterator i_begin = bb_begin->begin(),
+                              i_end = bb_begin->end();
+         i_begin != i_end; ++i_begin) {
+
+      Value *insn = dyn_cast<Value>(i_begin);
+      if (!m_present_in_original.count(insn)) {
+        m_present_in_original[insn] = 1;
+      } else {
+        assert(0 && "present in original map already has the insn?");
+      }
+    } /* BasicBlock ends */
+  }   /* Function ends */
+}
+
 void tasmChecking::getConstantExprBaseBound(Constant *given_constant,
                                             Value *&tmp_base,
                                             Value *&tmp_bound) {
@@ -718,10 +814,10 @@ void tasmChecking::getConstantExprBaseBound(Constant *given_constant,
 
       tmp_base = gep_base;
       tmp_bound = gep_bound;
-      errs() << "\n****************************************************\n";
-      errs() << "base: " << *tmp_base << "\n";
-      errs() << "bound: " << *tmp_bound << "\n";
-      errs() << "****************************************************\n";
+      // errs() << "\n****************************************************\n";
+      // errs() << "base: " << *tmp_base << "\n";
+      // errs() << "bound: " << *tmp_bound << "\n";
+      // errs() << "****************************************************\n";
     }
   }
 }
@@ -928,7 +1024,12 @@ void tasmChecking::addBaseBoundGlobals(Module &module) {
 
 // ref : softboundcets--isFuncDefSoftBound()
 bool tasmChecking::isFuncDefTaSMC(const std::string &str) {
+
+  // errs()<<"m_func_def_tasmc.getNumItems :
+  // "<<m_func_def_tasmc.getNumItems()<<"\n";
   if (m_func_def_tasmc.getNumItems() == 0) {
+    addTasmcRtFunctionToMap();
+    addWrapperFunctionToMap();
   }
 
   // Is the function name in the our list?
@@ -949,8 +1050,11 @@ bool tasmChecking::isFuncDefTaSMC(const std::string &str) {
   return false;
 }
 bool tasmChecking::checkIfFunctionOfInterest(Function *func) {
-  // if(isFuncDefTaSMC(func->getName()))
-  return false;
+
+  const std::string funcName(func->getName());
+  if (isFuncDefTaSMC(funcName)) {
+    return false;
+  }
 
   if (func->isDeclaration())
     return false;
@@ -1249,8 +1353,44 @@ void tasmChecking::addTasmcRtFunctionToMap() {
 }
 /****************************************************************************************************************************************/
 /* associate functions */
-void tasmChecking::associateBaseBound(Value *ptr, Value *base, Value *bound) {}
-void tasmChecking::dissociateBaseBound(Value *ptr) {}
+/** Method: associateBaseBound
+ *  Description: This function associates the base bound with the
+ * pointer operand in the  maps.
+ */
+void tasmChecking::associateBaseBound(Value *ptr, Value *base, Value *bound) {
+
+  if (m_pointer_base.count(ptr)) {
+    dissociateBaseBound(ptr);
+  }
+
+  if (base->getType() != m_void_ptr_type) {
+    assert(0 && "base does not have a void pointer type ");
+  }
+  m_pointer_base[ptr] = base;
+  if (m_pointer_bound.count(ptr)) {
+    assert(0 && "bound map already has an entry in the map");
+  }
+  if (bound->getType() != m_void_ptr_type) {
+    assert(0 && "bound does not have a void pointer type ");
+  }
+  m_pointer_bound[ptr] = bound;
+}
+
+// Method: dissociateBaseBound
+//
+// Description: This function removes the base/bound metadata
+// associated with the pointer operand in the maps.
+void tasmChecking::dissociateBaseBound(Value *ptr) {
+  if (m_pointer_base.count(ptr)) {
+    m_pointer_base.erase(ptr);
+  }
+  if (m_pointer_bound.count(ptr)) {
+    m_pointer_bound.erase(ptr);
+  }
+  assert((m_pointer_base.count(ptr) == 0) && "dissociating base failed\n");
+  assert((m_pointer_bound.count(ptr) == 0) && "dissociating bound failed");
+}
+
 Value *tasmChecking::getAssociatedBase(Value *ptr) { return ptr; }
 Value *tasmChecking::getAssociatedBound(Value *ptr) { return ptr; }
 void tasmChecking::associateFunctionKey(Value *key, Value *key1, Value *key2) {}
@@ -1285,9 +1425,91 @@ void tasmChecking::insertStoreBaseBoundFunc(Value *addr_of_ptr, Value *base,
   CallInst::Create(m_f_storeMetaData, args, "", insert_at);
 }
 
+/*************for shadow stack *****************/
+
+/** method: insertShadowStackLoads
+ *
+ * description：This function calls to the hadnlers that  performs the loads
+ * from the shadow stack to retrieve the metadata.
+ * then, associates the loaded metadata with the pointer  arguments in map.
+ *
+ * calling  :   void* _f_loadBoundOfShadowStack(int args_no)
+ * or calling : void _f_loadBaseOfShadowStack(int args_no)
+ */
+void tasmChecking::insertShadowStackLoads(Value *ptr_value,
+                                          Instruction *insert_at, int arg_no) {
+
+  if (!isa<PointerType>(ptr_value->getType()))
+    return;
+
+  Value *argno_value;
+  argno_value = ConstantInt::get(
+      Type::getInt32Ty(ptr_value->getType()->getContext()), arg_no, false);
+  SmallVector<Value *, 8> args;
+
+  // for spatial
+  args.clear();
+  args.push_back(argno_value);
+  Value *base =
+      CallInst::Create(m_f_loadBaseOfShadowStack, args, "", insert_at);
+
+  args.clear();
+  args.push_back(argno_value);
+  Value *bound =
+      CallInst::Create(m_f_loadBoundOfShadowStack, args, "", insert_at);
+  associateBaseBound(ptr_value, base, bound);
+}
+
+void tasmChecking::insertShadowStackAllocation(CallInst *) {}
+
+void tasmChecking::insertShadowStackStores(Value *, Instruction *, int) {}
+
+/*******helper functions************************/
 int tasmChecking::getPtrNumOfArgs(CallInst *Inst) { return 1; }
 bool tasmChecking::hasPtrArgRetType(Function *func) { return true; }
-bool tasmChecking::checkTypeHasPtrs(Argument *arg) { return true; }
+bool tasmChecking::checkTypeHasPtrs(Argument *ptr_arg) {
+
+  if (!ptr_arg->hasByValAttr())
+    return false;
+
+  ArrayType *array_type = dyn_cast<ArrayType>(ptr_arg->getType());
+  StructType *struct_type = dyn_cast<StructType>(array_type->getElementType());
+
+  if (struct_type) {
+    bool has_ptrs = checkStructHasPtrs(struct_type);
+    return has_ptrs;
+  } else {
+    assert(0 && "non-struct byval parameters?");
+  }
+  return true;
+}
+
+// check a struct has pointer ?
+bool tasmChecking::checkStructHasPtrs(StructType *struct_type) {
+
+  StructType::element_iterator ele_it = struct_type->element_begin();
+  bool flag = false;
+
+  for (StructType::element_iterator ele_end = struct_type->element_end();
+       ele_it != ele_end; ++ele_it) {
+    Type *element_type = *ele_it;
+    if (isa<StructType>(element_type)) {
+      StructType *struct_element_type = dyn_cast<StructType>(element_type);
+      bool recursive_flag = checkStructHasPtrs(struct_element_type);
+      flag = flag | recursive_flag;
+    }
+
+    if (isa<PointerType>(element_type)) {
+      flag = true;
+    }
+
+    if (isa<ArrayType>(element_type)) {
+      flag = true;
+    }
+  }
+
+  return flag;
+}
 
 // copy by softboundcets
 // Method: castToVoidPtr()
@@ -1320,16 +1542,38 @@ bool tasmChecking::runOnModule(Module &module) {
        ff_begin != ff_end; ++ff_begin) {
     Function *func_ptr = dyn_cast<Function>(ff_begin);
     assert(func_ptr && "Not a function??");
+    // errs()<<func_ptr->getName();
 
     // if the function from our library, ignore and continue.
     if (!checkIfFunctionOfInterest(func_ptr)) {
+      // errs()<<"no check \n";
       continue;
     }
+    // errs()<<" : yes check...\n";
 
-    // else do three pass
-    // pass1 : gather info
-    // write back some info that needed.
-    // add checker.
+    /** else do three pass
+     *  pass1 : gather info
+     *  write back some info that needed.
+     *  add checker.
+     */
+
+    // Iterating over the instructions in the function to identify IR
+    // instructions in the original program In this pass, the pointers
+    // in the original program are also identified.
+
+    identifyOriginalInst(func_ptr);
+
+    Instruction *first_inst = &*(func_ptr->begin()->begin());
+    // insert Function：allocation func_key
+
+    // first pass scanf.
+    scanfFirstPass(func_ptr);
+
+    // second pass scanf.
+    scanfSecondPass(func_ptr);
+
+    //  third pass insert checker.
+    insertDereferenceCheck(func_ptr);
 
   } // end for : traverse functions
 

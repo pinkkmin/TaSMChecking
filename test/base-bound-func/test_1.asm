@@ -11,8 +11,41 @@ test:                                   # @test
 	.cfi_offset %rbp, -16
 	movq	%rsp, %rbp
 	.cfi_def_cfa_register %rbp
-	movq	arrat_int_ptr+88, %rax
-	movl	$12, (%rax)
+	subq	$112, %rsp
+                                        # kill: def $dil killed $dil killed $edi
+	movl	$3, %eax
+	movb	%dil, -41(%rbp)                 # 1-byte Spill
+	movl	%eax, %edi
+	movq	%rcx, -56(%rbp)                 # 8-byte Spill
+	movq	%rdx, -64(%rbp)                 # 8-byte Spill
+	movq	%rsi, -72(%rbp)                 # 8-byte Spill
+	callq	_f_loadBaseOfShadowStack
+	movl	$3, %edi
+	movq	%rax, -80(%rbp)                 # 8-byte Spill
+	callq	_f_loadBoundOfShadowStack
+	movl	$2, %edi
+	movq	%rax, -88(%rbp)                 # 8-byte Spill
+	callq	_f_loadBaseOfShadowStack
+	movl	$2, %edi
+	movq	%rax, -96(%rbp)                 # 8-byte Spill
+	callq	_f_loadBoundOfShadowStack
+	movl	$1, %edi
+	movq	%rax, -104(%rbp)                # 8-byte Spill
+	callq	_f_loadBaseOfShadowStack
+	movl	$1, %edi
+	movq	%rax, -112(%rbp)                # 8-byte Spill
+	callq	_f_loadBoundOfShadowStack
+	movb	-41(%rbp), %r8b                 # 1-byte Reload
+	movb	%r8b, -1(%rbp)
+	movq	-72(%rbp), %rcx                 # 8-byte Reload
+	movq	%rcx, -16(%rbp)
+	movq	-64(%rbp), %rdx                 # 8-byte Reload
+	movq	%rdx, -24(%rbp)
+	movq	-56(%rbp), %rsi                 # 8-byte Reload
+	movq	%rsi, -32(%rbp)
+	movq	-16(%rbp), %r9
+	movq	%r9, -40(%rbp)
+	addq	$112, %rsp
 	popq	%rbp
 	.cfi_def_cfa %rsp, 8
 	retq
@@ -32,13 +65,19 @@ _f_pseudoMain:                          # @_f_pseudoMain
 	movq	%rsp, %rbp
 	.cfi_def_cfa_register %rbp
 	subq	$16, %rsp
+	movabsq	$array, %rax
+	movq	%rax, %rcx
+	addq	$400, %rcx                      # imm = 0x190
 	movl	$0, -4(%rbp)
+	movq	ptr, %rsi
 	movabsq	$.L.str, %rdi
+	movq	%rax, %rdx
+	movabsq	$ptr, %r8
 	movb	$0, %al
 	callq	printf
-	xorl	%ecx, %ecx
+	xorl	%r9d, %r9d
 	movl	%eax, -8(%rbp)                  # 4-byte Spill
-	movl	%ecx, %eax
+	movl	%r9d, %eax
 	addq	$16, %rsp
 	popq	%rbp
 	.cfi_def_cfa %rsp, 8
@@ -47,9 +86,9 @@ _f_pseudoMain:                          # @_f_pseudoMain
 	.size	_f_pseudoMain, .Lfunc_end1-_f_pseudoMain
 	.cfi_endproc
                                         # -- End function
-	.p2align	4, 0x90                         # -- Begin function __tasmc_global_init
-	.type	__tasmc_global_init,@function
-__tasmc_global_init:                    # @__tasmc_global_init
+	.p2align	4, 0x90                         # -- Begin function _tasmc_global_init
+	.type	_tasmc_global_init,@function
+_tasmc_global_init:                     # @_tasmc_global_init
 # %bb.0:
 	pushq	%rax
 	callq	_initTaSMC
@@ -64,7 +103,7 @@ __tasmc_global_init:                    # @__tasmc_global_init
 	popq	%rax
 	retq
 .Lfunc_end2:
-	.size	__tasmc_global_init, .Lfunc_end2-__tasmc_global_init
+	.size	_tasmc_global_init, .Lfunc_end2-_tasmc_global_init
                                         # -- End function
 	.type	array,@object                   # @array
 	.data
@@ -85,6 +124,12 @@ ptr:
 	.quad	array+4
 	.size	ptr, 8
 
+	.type	.L.str,@object                  # @.str
+	.section	.rodata.str1.1,"aMS",@progbits,1
+.L.str:
+	.asciz	"ptr : %zx, base: %zx, bound : %zx, addr_of_ptr : %zx\n"
+	.size	.L.str, 54
+
 	.type	arrat_int_ptr,@object           # @arrat_int_ptr
 	.bss
 	.globl	arrat_int_ptr
@@ -93,22 +138,17 @@ arrat_int_ptr:
 	.zero	800
 	.size	arrat_int_ptr, 800
 
-	.type	.L.str,@object                  # @.str
-	.section	.rodata.str1.1,"aMS",@progbits,1
-.L.str:
-	.asciz	"hello main()\n"
-	.size	.L.str, 14
-
 	.section	.init_array.0,"aw",@init_array
 	.p2align	3
-	.quad	__tasmc_global_init
+	.quad	_tasmc_global_init
 	.ident	"clang version 11.0.0"
 	.section	".note.GNU-stack","",@progbits
 	.addrsig
 	.addrsig_sym printf
+	.addrsig_sym _f_loadBaseOfShadowStack
+	.addrsig_sym _f_loadBoundOfShadowStack
 	.addrsig_sym _f_storeMetaData
-	.addrsig_sym __tasmc_global_init
+	.addrsig_sym _tasmc_global_init
 	.addrsig_sym _initTaSMC
 	.addrsig_sym array
 	.addrsig_sym ptr
-	.addrsig_sym arrat_int_ptr

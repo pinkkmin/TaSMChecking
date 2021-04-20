@@ -9,7 +9,7 @@ int const *ptr_to_const = array;
 
 int *ptr_array[10];
 
-void test() {
+void test(int a, int array[12]) {
    
    *ptr_array[12] = 12;
 }
