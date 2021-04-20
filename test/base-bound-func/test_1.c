@@ -10,9 +10,10 @@ void test(){
  *arrat_int_ptr[11] = 12;
 }
 int main(){
- printf("hello main()\n");
 
- printf("ptr:%zu,\tbase: %zu,\tbound : %zu,\taddr_of_ptr:%zu\n",(size_t)ptr,(size_t)array,(size_t)(array+100),(size_t)(&ptr));
+ printf("hello main()\n");
+ 
+ printf("ptr : %zx, base: %zx, bound : %zx, addr_of_ptr : %zx\n",(size_t)ptr,(size_t)array,(size_t)(array+100),(size_t)(&ptr));
 
  return 0;
 }

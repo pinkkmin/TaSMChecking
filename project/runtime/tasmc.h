@@ -144,7 +144,7 @@ extern  void _initTaSMC_ret();
 // 你也要初始化？
 extern void _initTaSMC();
 //好吧 全局初始化就是 初始化softboundcets 和 stub 
-void __tasmc_global_init()
+void _tasmc_global_init()
 {
   _initTaSMC();
   _initTaSMC_ret();
@@ -371,16 +371,14 @@ void _f_storeMetaData(void* addr_of_ptr, void* base, void* bound){
     }
 
     _tasmc_trie_entry* entry = &secondLevelTrie[secondIndex];
-
+    
     entry->base = base;
     entry->bound = bound;
+    // debug output info:
+    _f_printfPtrBaseBound(addr_of_ptr, base, bound);
 
     // printf("*******************************************\n");
     // printf("bound: %zx\n", (size_t)bound);
-    // debug output info:
-    int* ptr = *((int**)addr_of_ptr);
-    printf("【tasmc debug】 ptr: %zu,\t base: %zu,\tbound : %zu,\taddr_of_ptr:%zu \n", (size_t)ptr,(size_t)entry->base,(size_t)entry->bound,(size_t)addr_of_ptr);
-    
     // printf("*******************************************\n");
 
 } 
@@ -595,5 +593,15 @@ void _f_allocateSecondaryTrieRange(void* start, size_t size){
       primaryStart ++;
   }
   
+}
+
+// add debug printf ptr info
+void _f_printfPtrBaseBound(void* addr_of_ptr, void* base, void* bound){
+    void *ptr = *((void**)addr_of_ptr);
+    printf("[ tasmc debug ] ");
+    printf(" ptr: %zx, ", (size_t)ptr);
+    printf(" base: %zx, ", (size_t)base);
+    printf(" bound : %zx, ", (size_t)bound);
+    printf(" addr_of_ptr : %zx \n", (size_t)addr_of_ptr);
 }
 #endif

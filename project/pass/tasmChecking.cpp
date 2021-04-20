@@ -33,9 +33,11 @@ private:
   ConstantPointerNull *m_void_null_ptr;
   ConstantPointerNull *m_sizet_null_ptr;
   Value *m_infinite_bound_ptr;
-  //
 
+  // map : fucntionName -- bool
   StringMap<bool> m_func_def_tasmc;
+  StringMap<bool> m_func_wrappers_available;
+
   size_t allocaFunctionId;
   StringMap<size_t> m_function_pool;
   std::map<Value *, int> m_is_pointer;
@@ -114,7 +116,7 @@ public:
   void insertDereferenceCheck(Function *);
   void transformMainFunc(Module &);
   void identifyOriginalInst(Function *);
-  bool isFuncDefTaSMC(const std::string &str); // 是否定义
+  bool isFuncDefTaSMC(const std::string &str); // yes 是否定义
   bool checkIfFunctionOfInterest(Function *);
   /* handler llvm ir functions */
   void handleAlloca(AllocaInst *, Value *, Value *, Value *, BasicBlock *,
@@ -164,6 +166,8 @@ public:
   Value *getSizeOfType(Type *);                    // yes
   Value *castToVoidPtr(Value *, Instruction *);    // yes
   Instruction *getGlobalInitInstruction(Module &); // yes
+  void addWrapperFunctionToMap();                  // yes
+  void addTasmcRtFunctionToMap();                  // yes
 };
 } // namespace
 
@@ -322,10 +326,10 @@ void tasmChecking::constructPointerHandlers(Module &module) {
 // copy by softboundcets
 void tasmChecking::constructOthersHandlers(Module &module) {
 
-  module.getOrInsertFunction("__tasmc_global_init", VoidTy);
+  module.getOrInsertFunction("_tasmc_global_init", VoidTy);
 
-  Function *initGlobalFunc = module.getFunction("__tasmc_global_init");
-  assert(initGlobalFunc && "__tasmc_global_init is NULL ? ");
+  Function *initGlobalFunc = module.getFunction("_tasmc_global_init");
+  assert(initGlobalFunc && "_tasmc_global_init is NULL ? ");
 
   initGlobalFunc->setDoesNotThrow();
   initGlobalFunc->setLinkage(GlobalValue::InternalLinkage);
@@ -921,7 +925,29 @@ void tasmChecking::addBaseBoundGlobals(Module &module) {
     }
   }
 }
-bool tasmChecking::isFuncDefTaSMC(const std::string &str) { return true; }
+
+// ref : softboundcets--isFuncDefSoftBound()
+bool tasmChecking::isFuncDefTaSMC(const std::string &str) {
+  if (m_func_def_tasmc.getNumItems() == 0) {
+  }
+
+  // Is the function name in the our list?
+  if (m_func_def_tasmc.count(str) > 0) {
+    return true;
+  }
+
+  // FIXME: handling new intrinsics which have isoc99 in their name
+  if (str.find("isoc99") != std::string::npos) {
+    return true;
+  }
+
+  // If the function is an llvm intrinsic, don't transform it
+  if (str.find("llvm.") == 0) {
+    return true;
+  }
+
+  return false;
+}
 bool tasmChecking::checkIfFunctionOfInterest(Function *func) {
   // if(isFuncDefTaSMC(func->getName()))
   return false;
@@ -935,8 +961,8 @@ bool tasmChecking::checkIfFunctionOfInterest(Function *func) {
 // copy by softboundcets
 // get inst:global init inst
 Instruction *tasmChecking::getGlobalInitInstruction(Module &module) {
-  Function *global_init_function = module.getFunction("__tasmc_global_init");
-  assert(global_init_function && "no __tasmc_global_init function??");
+  Function *global_init_function = module.getFunction("_tasmc_global_init");
+  assert(global_init_function && "no _tasmc_global_init function??");
   Instruction *global_init_terminator = NULL;
   bool return_inst_flag = false;
   for (Function::iterator fi = global_init_function->begin(),
@@ -957,6 +983,269 @@ Instruction *tasmChecking::getGlobalInitInstruction(Module &module) {
   }
   assert(global_init_terminator && "global init does not have return, strange");
   return global_init_terminator;
+}
+
+// helper function
+// add wrappers function to the map: m_func_wrappers_available
+void tasmChecking::addWrapperFunctionToMap() {
+
+  m_func_wrappers_available["system"] = true;
+  m_func_wrappers_available["setreuid"] = true;
+  m_func_wrappers_available["mkstemp"] = true;
+  m_func_wrappers_available["getuid"] = true;
+  m_func_wrappers_available["getrlimit"] = true;
+  m_func_wrappers_available["setrlimit"] = true;
+  m_func_wrappers_available["fread"] = true;
+  m_func_wrappers_available["umask"] = true;
+  m_func_wrappers_available["mkdir"] = true;
+  m_func_wrappers_available["chroot"] = true;
+  m_func_wrappers_available["rmdir"] = true;
+  m_func_wrappers_available["stat"] = true;
+  m_func_wrappers_available["fputc"] = true;
+  m_func_wrappers_available["fileno"] = true;
+  m_func_wrappers_available["fgetc"] = true;
+  m_func_wrappers_available["strncmp"] = true;
+  m_func_wrappers_available["log"] = true;
+  m_func_wrappers_available["fwrite"] = true;
+  m_func_wrappers_available["atof"] = true;
+  m_func_wrappers_available["feof"] = true;
+  m_func_wrappers_available["remove"] = true;
+  m_func_wrappers_available["acos"] = true;
+  m_func_wrappers_available["atan2"] = true;
+  m_func_wrappers_available["sqrtf"] = true;
+  m_func_wrappers_available["expf"] = true;
+  m_func_wrappers_available["exp2"] = true;
+  m_func_wrappers_available["floorf"] = true;
+  m_func_wrappers_available["ceil"] = true;
+  m_func_wrappers_available["ceilf"] = true;
+  m_func_wrappers_available["floor"] = true;
+  m_func_wrappers_available["sqrt"] = true;
+  m_func_wrappers_available["fabs"] = true;
+  m_func_wrappers_available["abs"] = true;
+  m_func_wrappers_available["srand"] = true;
+  m_func_wrappers_available["srand48"] = true;
+  m_func_wrappers_available["pow"] = true;
+  m_func_wrappers_available["fabsf"] = true;
+  m_func_wrappers_available["tan"] = true;
+  m_func_wrappers_available["tanf"] = true;
+  m_func_wrappers_available["tanl"] = true;
+  m_func_wrappers_available["log10"] = true;
+  m_func_wrappers_available["sin"] = true;
+  m_func_wrappers_available["sinf"] = true;
+  m_func_wrappers_available["sinl"] = true;
+  m_func_wrappers_available["cos"] = true;
+  m_func_wrappers_available["cosf"] = true;
+  m_func_wrappers_available["cosl"] = true;
+  m_func_wrappers_available["exp"] = true;
+  m_func_wrappers_available["ldexp"] = true;
+  m_func_wrappers_available["tmpfile"] = true;
+  m_func_wrappers_available["ferror"] = true;
+  m_func_wrappers_available["ftell"] = true;
+  m_func_wrappers_available["fstat"] = true;
+  m_func_wrappers_available["fflush"] = true;
+  m_func_wrappers_available["fputs"] = true;
+  m_func_wrappers_available["fopen"] = true;
+  m_func_wrappers_available["fdopen"] = true;
+  m_func_wrappers_available["fseek"] = true;
+  m_func_wrappers_available["ftruncate"] = true;
+  m_func_wrappers_available["popen"] = true;
+  m_func_wrappers_available["fclose"] = true;
+  m_func_wrappers_available["pclose"] = true;
+  m_func_wrappers_available["rewind"] = true;
+  m_func_wrappers_available["readdir"] = true;
+  m_func_wrappers_available["opendir"] = true;
+  m_func_wrappers_available["closedir"] = true;
+  m_func_wrappers_available["rename"] = true;
+  m_func_wrappers_available["sleep"] = true;
+  m_func_wrappers_available["getcwd"] = true;
+  m_func_wrappers_available["chown"] = true;
+  m_func_wrappers_available["isatty"] = true;
+  m_func_wrappers_available["chdir"] = true;
+  m_func_wrappers_available["strcmp"] = true;
+  m_func_wrappers_available["strcasecmp"] = true;
+  m_func_wrappers_available["strncasecmp"] = true;
+  m_func_wrappers_available["strlen"] = true;
+  m_func_wrappers_available["strpbrk"] = true;
+  m_func_wrappers_available["gets"] = true;
+  m_func_wrappers_available["fgets"] = true;
+  m_func_wrappers_available["perror"] = true;
+  m_func_wrappers_available["strspn"] = true;
+  m_func_wrappers_available["strcspn"] = true;
+  m_func_wrappers_available["memcmp"] = true;
+  m_func_wrappers_available["memchr"] = true;
+  m_func_wrappers_available["rindex"] = true;
+  m_func_wrappers_available["strtoul"] = true;
+  m_func_wrappers_available["strtod"] = true;
+  m_func_wrappers_available["strtol"] = true;
+  m_func_wrappers_available["strchr"] = true;
+  m_func_wrappers_available["strrchr"] = true;
+  m_func_wrappers_available["strcpy"] = true;
+  m_func_wrappers_available["abort"] = true;
+  m_func_wrappers_available["rand"] = true;
+  m_func_wrappers_available["atoi"] = true;
+  m_func_wrappers_available["puts"] = true;
+  m_func_wrappers_available["exit"] = true;
+  m_func_wrappers_available["strtok"] = true;
+  m_func_wrappers_available["strdup"] = true;
+  m_func_wrappers_available["strcat"] = true;
+  m_func_wrappers_available["strncat"] = true;
+  m_func_wrappers_available["strncpy"] = true;
+  m_func_wrappers_available["strstr"] = true;
+  m_func_wrappers_available["signal"] = true;
+  m_func_wrappers_available["clock"] = true;
+  m_func_wrappers_available["atol"] = true;
+  m_func_wrappers_available["realloc"] = true;
+  m_func_wrappers_available["calloc"] = true;
+  m_func_wrappers_available["malloc"] = true;
+  m_func_wrappers_available["mmap"] = true;
+
+  m_func_wrappers_available["putchar"] = true;
+  m_func_wrappers_available["times"] = true;
+  m_func_wrappers_available["strftime"] = true;
+  m_func_wrappers_available["localtime"] = true;
+  m_func_wrappers_available["time"] = true;
+  m_func_wrappers_available["drand48"] = true;
+  m_func_wrappers_available["free"] = true;
+  m_func_wrappers_available["lrand48"] = true;
+  m_func_wrappers_available["ctime"] = true;
+  m_func_wrappers_available["difftime"] = true;
+  m_func_wrappers_available["toupper"] = true;
+  m_func_wrappers_available["tolower"] = true;
+  m_func_wrappers_available["setbuf"] = true;
+  m_func_wrappers_available["getenv"] = true;
+  m_func_wrappers_available["atexit"] = true;
+  m_func_wrappers_available["strerror"] = true;
+  m_func_wrappers_available["unlink"] = true;
+  m_func_wrappers_available["close"] = true;
+  m_func_wrappers_available["open"] = true;
+  m_func_wrappers_available["read"] = true;
+  m_func_wrappers_available["write"] = true;
+  m_func_wrappers_available["lseek"] = true;
+  m_func_wrappers_available["gettimeofday"] = true;
+  m_func_wrappers_available["select"] = true;
+  m_func_wrappers_available["__errno_location"] = true;
+  m_func_wrappers_available["__ctype_b_loc"] = true;
+  m_func_wrappers_available["__ctype_toupper_loc"] = true;
+  m_func_wrappers_available["__ctype_tolower_loc"] = true;
+  m_func_wrappers_available["qsort"] = true;
+}
+
+// helper function
+// add tasmc_rt.a function to the map: m_func_def_tasmc
+void tasmChecking::addTasmcRtFunctionToMap() {
+
+  // functions form tasmc_rt.a
+  m_func_def_tasmc["_f_addPtrToFreeTable"] = true;
+  m_func_def_tasmc["_f_allocateFunctionKey"] = true;
+  m_func_def_tasmc["_f_allocatePtrKey"] = true;
+  m_func_def_tasmc["_f_allocateSecondaryTrieRange"] = true;
+  m_func_def_tasmc["_f_allocateShadowStackMetadata"] = true;
+  m_func_def_tasmc["_f_callAbort"] = true;
+  m_func_def_tasmc["_f_checkSpatialLoadPtr"] = true;
+  m_func_def_tasmc["_f_checkSpatialStorePtr"] = true;
+  m_func_def_tasmc["_f_checkTemporalLoadPtr"] = true;
+  m_func_def_tasmc["_f_checkTemporalStorePtr"] = true;
+  m_func_def_tasmc["_f_cmpPointerAddr"] = true;
+  m_func_def_tasmc["_f_copyMetaData"] = true;
+  m_func_def_tasmc["_f_deallocatePointer"] = true;
+  m_func_def_tasmc["_f_deallocateShadowStackMetaData"] = true;
+  m_func_def_tasmc["_f_decPointerAddr"] = true;
+  m_func_def_tasmc["_f_free"] = true;
+  m_func_def_tasmc["_f_freeFunctionKey"] = true;
+  m_func_def_tasmc["_f_getPointerKey"] = true;
+  m_func_def_tasmc["_f_getPointerType"] = true;
+  m_func_def_tasmc["_f_getPtrFreeFlagFromFAT"] = true;
+  m_func_def_tasmc["_f_incPointerAddr"] = true;
+  m_func_def_tasmc["_f_initFunctionKeyPool"] = true;
+  m_func_def_tasmc["_f_isFreeAbleOfPointer"] = true;
+  m_func_def_tasmc["_f_loadBaseOfMetaData"] = true;
+  m_func_def_tasmc["_f_loadBaseOfShadowStack"] = true;
+  m_func_def_tasmc["_f_loadBoundOfMetadata"] = true;
+  m_func_def_tasmc["_f_loadBoundOfShadowStack"] = true;
+  m_func_def_tasmc["_f_malloc"] = true;
+  m_func_def_tasmc["_f_maskingPointer"] = true;
+  m_func_def_tasmc["_f_printfPointerDebug"] = true;
+  m_func_def_tasmc["_f_pseudoMain"] = true;
+
+  m_func_def_tasmc["_f_removePtrFromFreeTable"] = true;
+  m_func_def_tasmc["_f_safe_mmap"] = true;
+  m_func_def_tasmc["_f_setPointerKey"] = true;
+  m_func_def_tasmc["_f_setPointerType"] = true;
+  m_func_def_tasmc["_f_setPtrFreeFlagToFAT"] = true;
+  m_func_def_tasmc["_f_storeBaseOfShadowStack"] = true;
+  m_func_def_tasmc["_f_storeBoundOfShadowStack"] = true;
+  m_func_def_tasmc["_f_storeMetaData"] = true;
+  m_func_def_tasmc["_f_tasmcPrintf"] = true;
+  m_func_def_tasmc["_f_trie_allocate"] = true;
+  m_func_def_tasmc["_f_typeCasePointer"] = true;
+
+  m_func_def_tasmc["_initTaSMC"] = true;
+  m_func_def_tasmc["_initTaSMC_ret"] = true;
+  m_func_def_tasmc["_f_printfPtrBaseBound"] = true;
+  m_func_def_tasmc["_tasmc_global_init"] = true;
+  // end from
+
+  m_func_def_tasmc["puts"] = true; // maybe delete
+
+  m_func_def_tasmc["__assert_fail"] = true;
+  m_func_def_tasmc["assert"] = true;
+  m_func_def_tasmc["__strspn_c2"] = true;
+  m_func_def_tasmc["__strcspn_c2"] = true;
+  m_func_def_tasmc["__strtol_internal"] = true;
+  m_func_def_tasmc["__stroul_internal"] = true;
+  m_func_def_tasmc["ioctl"] = true;
+  m_func_def_tasmc["error"] = true;
+  m_func_def_tasmc["__strtod_internal"] = true;
+  m_func_def_tasmc["__strtoul_internal"] = true;
+
+  m_func_def_tasmc["fflush_unlocked"] = true;
+  m_func_def_tasmc["full_write"] = true;
+  m_func_def_tasmc["safe_read"] = true;
+  m_func_def_tasmc["_IO_getc"] = true;
+  m_func_def_tasmc["_IO_putc"] = true;
+  m_func_def_tasmc["__xstat"] = true;
+
+  m_func_def_tasmc["select"] = true;
+  m_func_def_tasmc["_setjmp"] = true;
+  m_func_def_tasmc["longjmp"] = true;
+  m_func_def_tasmc["fork"] = true;
+  m_func_def_tasmc["pipe"] = true;
+  m_func_def_tasmc["dup2"] = true;
+  m_func_def_tasmc["execv"] = true;
+  m_func_def_tasmc["compare_pic_by_pic_num_desc"] = true;
+
+  m_func_def_tasmc["wprintf"] = true;
+  m_func_def_tasmc["vfprintf"] = true;
+  m_func_def_tasmc["vsprintf"] = true;
+  m_func_def_tasmc["fprintf"] = true;
+  m_func_def_tasmc["printf"] = true;
+  m_func_def_tasmc["sprintf"] = true;
+  m_func_def_tasmc["snprintf"] = true;
+
+  m_func_def_tasmc["scanf"] = true;
+  m_func_def_tasmc["fscanf"] = true;
+  m_func_def_tasmc["sscanf"] = true;
+
+  m_func_def_tasmc["asprintf"] = true;
+  m_func_def_tasmc["vasprintf"] = true;
+  m_func_def_tasmc["__fpending"] = true;
+  m_func_def_tasmc["fcntl"] = true;
+
+  m_func_def_tasmc["vsnprintf"] = true;
+  m_func_def_tasmc["fwrite_unlocked"] = true;
+  m_func_def_tasmc["__overflow"] = true;
+  m_func_def_tasmc["__uflow"] = true;
+  m_func_def_tasmc["execlp"] = true;
+  m_func_def_tasmc["execl"] = true;
+  m_func_def_tasmc["waitpid"] = true;
+  m_func_def_tasmc["dup"] = true;
+  m_func_def_tasmc["setuid"] = true;
+
+  m_func_def_tasmc["_exit"] = true;
+  m_func_def_tasmc["funlockfile"] = true;
+  m_func_def_tasmc["flockfile"] = true;
+
+  m_func_def_tasmc["__option_is_short"] = true;
 }
 /****************************************************************************************************************************************/
 /* associate functions */
@@ -1002,9 +1291,7 @@ bool tasmChecking::checkTypeHasPtrs(Argument *arg) { return true; }
 
 // copy by softboundcets
 // Method: castToVoidPtr()
-//
 // Description:
-//
 // This function introduces a bitcast instruction in the IR when an
 // input operand that is a pointer type is not of type i8*. This is
 // required as all the SoftBound/CETS handlers take i8*s
@@ -1023,18 +1310,28 @@ bool tasmChecking::runOnModule(Module &module) {
   initializeVariables(module);
 
   // transform main() to _f_pseudoMain()
-  
-     transformMainFunc(module);
-   addBaseBoundGlobals(module);
+  transformMainFunc(module);
+
+  // add global value:ptr to metadata.
+  addBaseBoundGlobals(module);
+
+  // Traverse every function ,but except our functions of runtime library.
   for (Module::iterator ff_begin = module.begin(), ff_end = module.end();
        ff_begin != ff_end; ++ff_begin) {
     Function *func_ptr = dyn_cast<Function>(ff_begin);
     assert(func_ptr && "Not a function??");
 
+    // if the function from our library, ignore and continue.
     if (!checkIfFunctionOfInterest(func_ptr)) {
       continue;
     }
-  }
+
+    // else do three pass
+    // pass1 : gather info
+    // write back some info that needed.
+    // add checker.
+
+  } // end for : traverse functions
 
   return true;
 }

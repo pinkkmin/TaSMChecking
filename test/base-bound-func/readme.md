@@ -2,7 +2,7 @@
 
 ## ASM File
 ```
-clang -Xclang -load -Xclang /root/TaSMChecking/project/libtasmc.so  test_1.c -S -o test_1
+clang -Xclang -load -Xclang /root/TaSMChecking/project/libtasmc.so  test_1.c -S -o test_1.asm
 
 ```
 
