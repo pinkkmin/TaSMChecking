@@ -9,6 +9,10 @@
 /root/TaSMChecking/project/pass/tasmChecking.cpp
 algorithm
 -
+cstdarg
+-
+cstdlib
+-
 iostream
 -
 llvm/ADT/StringMap.h
@@ -16,6 +20,8 @@ llvm/ADT/StringMap.h
 llvm/Analysis/AliasAnalysis.h
 -
 llvm/IR/CallingConv.h
+-
+llvm/IR/CFG.h
 -
 llvm/IR/Constants.h
 -
@@ -40,5 +46,11 @@ llvm/Pass.h
 llvm/Support/raw_ostream.h
 -
 llvm/Transforms/IPO/PassManagerBuilder.h
+-
+memory
+-
+queue
+-
+set
 -
 

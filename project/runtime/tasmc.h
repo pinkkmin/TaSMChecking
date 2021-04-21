@@ -261,17 +261,17 @@ void* _f_cmpPointerAddr(void* ptrLhs, void* ptrRhs, int op){
     switch (op)
     {
         case TaSMC_CMP_EQUAL:
-        return basePtrLhs == basePtrRhs;
+        return (void*)(basePtrLhs == basePtrRhs);
 
         case TaSMC_CMP_LESS:
-            return basePtrLhs < basePtrRhs;
+            return (void*)(basePtrLhs < basePtrRhs);
 
         case TaSMC_CMP_LESS_EQUAL:
-            return basePtrLhs <= basePtrRhs;
+            return (void*)(basePtrLhs <= basePtrRhs);
         case TaSMC_CMP_MORE:
-            return basePtrLhs > basePtrRhs;
+            return (void*)(basePtrLhs > basePtrRhs);
         case TaSMC_CMP_MORE_EQUAL:    
-            return basePtrLhs <= basePtrRhs;
+            return (void*)(basePtrLhs <= basePtrRhs);
         default:
             break;
     }

@@ -11,41 +11,59 @@ test:                                   # @test
 	.cfi_offset %rbp, -16
 	movq	%rsp, %rbp
 	.cfi_def_cfa_register %rbp
-	subq	$112, %rsp
+	subq	$176, %rsp
                                         # kill: def $dil killed $dil killed $edi
 	movl	$3, %eax
-	movb	%dil, -41(%rbp)                 # 1-byte Spill
+	movb	%dil, -57(%rbp)                 # 1-byte Spill
 	movl	%eax, %edi
-	movq	%rcx, -56(%rbp)                 # 8-byte Spill
-	movq	%rdx, -64(%rbp)                 # 8-byte Spill
-	movq	%rsi, -72(%rbp)                 # 8-byte Spill
+	movq	%rcx, -72(%rbp)                 # 8-byte Spill
+	movq	%rdx, -80(%rbp)                 # 8-byte Spill
+	movq	%rsi, -88(%rbp)                 # 8-byte Spill
 	callq	_f_loadBaseOfShadowStack
 	movl	$3, %edi
-	movq	%rax, -80(%rbp)                 # 8-byte Spill
-	callq	_f_loadBoundOfShadowStack
-	movl	$2, %edi
-	movq	%rax, -88(%rbp)                 # 8-byte Spill
-	callq	_f_loadBaseOfShadowStack
-	movl	$2, %edi
 	movq	%rax, -96(%rbp)                 # 8-byte Spill
 	callq	_f_loadBoundOfShadowStack
-	movl	$1, %edi
+	movl	$2, %edi
 	movq	%rax, -104(%rbp)                # 8-byte Spill
 	callq	_f_loadBaseOfShadowStack
-	movl	$1, %edi
+	movl	$2, %edi
 	movq	%rax, -112(%rbp)                # 8-byte Spill
 	callq	_f_loadBoundOfShadowStack
-	movb	-41(%rbp), %r8b                 # 1-byte Reload
+	movl	$1, %edi
+	movq	%rax, -120(%rbp)                # 8-byte Spill
+	callq	_f_loadBaseOfShadowStack
+	movl	$1, %edi
+	movq	%rax, -128(%rbp)                # 8-byte Spill
+	callq	_f_loadBoundOfShadowStack
+	movb	-57(%rbp), %r8b                 # 1-byte Reload
 	movb	%r8b, -1(%rbp)
-	movq	-72(%rbp), %rcx                 # 8-byte Reload
+	movq	-88(%rbp), %rcx                 # 8-byte Reload
 	movq	%rcx, -16(%rbp)
-	movq	-64(%rbp), %rdx                 # 8-byte Reload
+	movq	-80(%rbp), %rdx                 # 8-byte Reload
 	movq	%rdx, -24(%rbp)
-	movq	-56(%rbp), %rsi                 # 8-byte Reload
+	movq	-72(%rbp), %rsi                 # 8-byte Reload
 	movq	%rsi, -32(%rbp)
-	movq	-16(%rbp), %r9
-	movq	%r9, -40(%rbp)
-	addq	$112, %rsp
+	movl	$1, %edi
+	movq	%rax, -136(%rbp)                # 8-byte Spill
+	callq	_f_allocateShadowStackMetadata
+	movl	$4, %edi
+	movq	%rax, -144(%rbp)                # 8-byte Spill
+	callq	malloc
+	xorl	%edi, %edi
+	movq	%rax, -152(%rbp)                # 8-byte Spill
+	callq	_f_loadBaseOfShadowStack
+	xorl	%edi, %edi
+	movq	%rax, -160(%rbp)                # 8-byte Spill
+	callq	_f_loadBoundOfShadowStack
+	movq	%rax, -168(%rbp)                # 8-byte Spill
+	callq	_f_deallocateShadowStackMetaData
+	movq	-152(%rbp), %rax                # 8-byte Reload
+	movq	%rax, -40(%rbp)
+	movq	-40(%rbp), %rax
+	movq	%rax, -48(%rbp)
+	movq	-32(%rbp), %rax
+	movq	%rax, -56(%rbp)
+	addq	$176, %rsp
 	popq	%rbp
 	.cfi_def_cfa %rsp, 8
 	retq
@@ -144,9 +162,12 @@ arrat_int_ptr:
 	.ident	"clang version 11.0.0"
 	.section	".note.GNU-stack","",@progbits
 	.addrsig
+	.addrsig_sym malloc
 	.addrsig_sym printf
 	.addrsig_sym _f_loadBaseOfShadowStack
 	.addrsig_sym _f_loadBoundOfShadowStack
+	.addrsig_sym _f_allocateShadowStackMetadata
+	.addrsig_sym _f_deallocateShadowStackMetaData
 	.addrsig_sym _f_storeMetaData
 	.addrsig_sym _tasmc_global_init
 	.addrsig_sym _initTaSMC
