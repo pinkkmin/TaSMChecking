@@ -4,8 +4,8 @@
 #include <iostream>
 #include <llvm/ADT/StringMap.h>
 #include <llvm/Analysis/AliasAnalysis.h>
-#include <llvm/IR/CallingConv.h>
 #include <llvm/IR/CFG.h>
+#include <llvm/IR/CallingConv.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/IRBuilder.h>
@@ -66,6 +66,7 @@ private:
   Function *m_f_loadBaseOfMetaData;
   Function *m_f_loadBoundOfMetadata;
   Function *m_f_storeMetaData;
+  Function *m_f_loadMetaData;
   Function *m_f_copyMetaData;
 
   // shadow-stack function
@@ -135,57 +136,57 @@ public:
   void addMemcopyMemsetCheck(CallInst *, Function *); // no
 
   /* handler llvm ir functions */
-  void handleAlloca(AllocaInst *, BasicBlock *, BasicBlock::iterator &);
-  void handleLoad(LoadInst *);
+  void handleAlloca(AllocaInst *, BasicBlock *, BasicBlock::iterator &); // yes
+  void handleLoad(LoadInst *);                                           // yes
   void handleVectorStore(StoreInst *);
-  void handleStore(StoreInst *);
-  void handleGEP(GetElementPtrInst *);
+  void handleStore(StoreInst *);       // yes
+  void handleGEP(GetElementPtrInst *); // yes
 
-  void handleBitCast(BitCastInst *);
-  void handlePHIPass1(PHINode *); // 一趟生成
-  void handlePHIPass2(PHINode *); // 二趟填写
-  void handleCall(CallInst *);
+  void handleBitCast(BitCastInst *); // yes
+  void handlePHIPass1(PHINode *);    // 一趟生成
+  void handlePHIPass2(PHINode *);    // 二趟填写
+  void handleCall(CallInst *);       // yes
   void handleMemcpy(CallInst *);
   void handleIndirectCall(CallInst *);
   void handleExtractValue(ExtractValueInst *); // 提取
   void handleExtractElement(ExtractElementInst *);
   void handleSelect(SelectInst *, int);
   void handleIntToPtr(IntToPtrInst *);
-  void handleReturnInst(ReturnInst *);
+  void handleReturnInst(ReturnInst *); // yes
 
   /* associate functions */
-  void associateBaseBound(Value *, Value *, Value *);
-  void dissociateBaseBound(Value *);
-  Value *getAssociatedBase(Value *);
-  Value *getAssociatedBound(Value *);
+  void associateBaseBound(Value *, Value *, Value *); // yes
+  void dissociateBaseBound(Value *);                  // yes
+  Value *getAssociatedBase(Value *);                  // yes
+  Value *getAssociatedBound(Value *);                 // yes
   void associateFunctionKey(Value *, Value *, Value *);
   void dissociateFuncitonKey(Value *);
   Value *getAssociatedFuncitonKey(Value *);
 
   /** for global */
-  void addBaseBoundGlobals(Module &);
+  void addBaseBoundGlobals(Module &); // yes
   // for pointerType
-  void getConstantExprBaseBound(Constant *, Value *&, Value *&);
+  void getConstantExprBaseBound(Constant *, Value *&, Value *&); // yes
   // for arrayType
-  void handleGlobalArrayTypeInitializer(Module &, GlobalVariable *);
+  void handleGlobalArrayTypeInitializer(Module &, GlobalVariable *); // yes
   // for StructType
   void handleGlobalStructTypeInitializer(Module &, StructType *, Constant *,
                                          GlobalVariable *,
-                                         std::vector<Constant *>, int);
+                                         std::vector<Constant *>, int); // yes
 
   // for shadow stack
-  void insertShadowStackLoads(Value *, Instruction *, int);
-  void insertShadowStackStores(Value *, Instruction *, int);
-  void insertShadowStackAllocation(CallInst *);
-  void insertCallSiteIntroduceShadowStackStores(CallInst *);
-  void insertShadowStackDeallocation(CallInst *, Instruction *);
+  void insertShadowStackLoads(Value *, Instruction *, int);      // yes
+  void insertShadowStackStores(Value *, Instruction *, int);     // yes
+  void insertShadowStackAllocation(CallInst *);                  // yes
+  void insertCallSiteIntroduceShadowStackStores(CallInst *);     // yes
+  void insertShadowStackDeallocation(CallInst *, Instruction *); // yes
 
   // help functions
   // get count of pointer from args（and return）
-  int getPtrNumOfArgsAndReturn(CallInst *);
+  int getPtrNumOfArgsAndReturn(CallInst *); // yes
   bool hasPtrArgRetType(Function *);
   bool checkTypeHasPtrs(Argument *);
-  bool checkStructHasPtrs(StructType *);
+  bool checkStructHasPtrs(StructType *);           // yes
   Value *getSizeOfType(Type *);                    // yes
   Value *castToVoidPtr(Value *, Instruction *);    // yes
   Instruction *getGlobalInitInstruction(Module &); // yes
@@ -274,6 +275,11 @@ void tasmChecking::constructMetadataHandlers(Module &module) {
   // void _f_storeMetaData(void* addr_of_ptr, void* base, void* bound)
   module.getOrInsertFunction("_f_storeMetaData", VoidTy, VoidPtrTy, VoidPtrTy,
                              VoidPtrTy);
+
+  // void _f_loadMetaData(void* addr_of_ptr, void** addr_of_base, void**
+  // addr_of_bound)
+  module.getOrInsertFunction("_f_loadMetaData", VoidTy, VoidPtrTy,
+                             PtrOfVoidPtrTy, PtrOfVoidPtrTy);
 
   // void _f_copyMetaData(void* addr_of_from, void* addr_of_dest)
   module.getOrInsertFunction("_f_copyMetaData", VoidTy, VoidPtrTy, VoidPtrTy);
@@ -451,6 +457,9 @@ void tasmChecking::getMetadataFunctions(Module &module) {
 
   m_f_storeMetaData = module.getFunction("_f_storeMetaData");
   assert(m_f_storeMetaData && "m_f_storeMetaData is NULL ? ");
+
+  m_f_loadMetaData = module.getFunction("_f_loadMetaData");
+  assert(m_f_loadMetaData && "m_f_loadMetaData is NULL ? ");
 
   m_f_copyMetaData = module.getFunction("_f_copyMetaData");
   assert(m_f_copyMetaData && "m_f_copyMetaData is NULL ? ");
@@ -670,7 +679,7 @@ void tasmChecking::scanfFirstPass(Function *func) {
     bb_visited.insert(bb);
 
     // Iterating over the successors and adding the successors to the work list
-    for (succ_iterator  si = succ_begin(bb), se = succ_end(bb); si != se; ++si) {
+    for (succ_iterator si = succ_begin(bb), se = succ_end(bb); si != se; ++si) {
 
       BasicBlock *next_bb = *si;
       assert(
@@ -1171,8 +1180,8 @@ void tasmChecking::addBaseBoundGlobals(Module &module) {
 // ref : softboundcets--isFuncDefSoftBound()
 bool tasmChecking::isFuncDefTaSMC(const std::string &str) {
 
-  // errs()<<"m_func_def_tasmc.getNumItems :
-  // "<<m_func_def_tasmc.getNumItems()<<"\n";
+  //  errs()<<"m_func_def_tasmc.getNumItems
+  //  :"<<m_func_def_tasmc.getNumItems()<<"\n";
   if (m_func_def_tasmc.getNumItems() == 0) {
     addTasmcRtFunctionToMap();
     addWrapperFunctionToMap();
@@ -1229,6 +1238,32 @@ void tasmChecking::insertMetadataLoad(LoadInst *load_inst) {
   /* If the load returns a pointer, then load the base and bound
    * from the shadow space
    */
+  Value *pointer_operand_bitcast = castToVoidPtr(pointer_operand, insert_at);
+  Instruction *first_inst_func = dyn_cast<Instruction>(
+      load_inst->getParent()->getParent()->begin()->begin());
+  assert(first_inst_func &&
+         "function doesn't have any instruction and there is load???");
+
+  /* address of pointer being pushed */
+  args.push_back(pointer_operand_bitcast);
+
+  // allocaInst changed. llvm-review: https://reviews.llvm.org/D31042
+  base_alloca =
+      new AllocaInst(m_void_ptr_type, 8, "base.alloca", first_inst_func);
+  bound_alloca =
+      new AllocaInst(m_void_ptr_type, 8, "bound.alloca", first_inst_func);
+
+  /* base */
+  args.push_back(base_alloca);
+  /* bound */
+  args.push_back(bound_alloca);
+
+  CallInst::Create(m_f_loadMetaData, args, "", insert_at);
+  Instruction *base_load =
+      new LoadInst(m_void_ptr_type, base_alloca, "base.load", insert_at);
+  Instruction *bound_load =
+      new LoadInst(m_void_ptr_type, bound_alloca, "bound.load", insert_at);
+  associateBaseBound(load_inst_value, base_load, bound_load);
 }
 
 // copy by softboundcets
@@ -1438,7 +1473,7 @@ void tasmChecking::addTasmcRtFunctionToMap() {
   m_func_def_tasmc["_f_malloc"] = true;
   m_func_def_tasmc["_f_maskingPointer"] = true;
   m_func_def_tasmc["_f_printfPointerDebug"] = true;
-  m_func_def_tasmc["_f_pseudoMain"] = true;
+  // m_func_def_tasmc["_f_pseudoMain"] = true;
 
   m_func_def_tasmc["_f_removePtrFromFreeTable"] = true;
   m_func_def_tasmc["_f_safe_mmap"] = true;
@@ -1519,6 +1554,9 @@ void tasmChecking::addTasmcRtFunctionToMap() {
   m_func_def_tasmc["flockfile"] = true;
 
   m_func_def_tasmc["__option_is_short"] = true;
+
+  // test add
+  m_func_def_tasmc["malloc"] = true;
 }
 
 /* returns the next instruction after the input instruction.
@@ -1600,22 +1638,78 @@ void tasmChecking::handleLoad(LoadInst *load_inst) {
   if (!isa<VectorType>(load_inst->getType()) &&
       !isa<PointerType>(load_inst->getType())) {
     return;
+  }
 
-    if (isa<PointerType>(load_inst->getType())) {
-      insertMetadataLoad(load_inst);
-      return;
-    }
+  if (isa<PointerType>(load_inst->getType())) {
+    insertMetadataLoad(load_inst);
+    return;
+  }
 
-    if (isa<VectorType>(load_inst->getType())) {
+  if (isa<VectorType>(load_inst->getType())) {
 
-      // todo : vector has pointer.
-    }
+    // todo : vector has pointer.
   }
 }
 
 // do nothing.
 void tasmChecking::handleVectorStore(StoreInst *inst) {}
-void tasmChecking::handleStore(StoreInst *) {}
+
+void tasmChecking::handleStore(StoreInst *store_inst) {
+
+  Value *operand = store_inst->getOperand(0);
+  Value *pointer_dest = store_inst->getOperand(1);
+  Instruction *insert_at = getNextInstruction(store_inst);
+
+  if (isa<VectorType>(operand->getType())) {
+    const VectorType *vector_ty = dyn_cast<VectorType>(operand->getType());
+    if (isa<PointerType>(vector_ty->getElementType())) {
+      handleVectorStore(store_inst);
+      return;
+    }
+  }
+
+  /* If a pointer is being stored, then the base and bound
+   * corresponding to the pointer must be stored in the shadow space
+   */
+  if (!isa<PointerType>(operand->getType()))
+    return;
+
+  if (isa<ConstantPointerNull>(operand)) {
+    /* it is a constant pointer null being stored
+     * store null to the shadow space
+     */
+    Value *size_of_type = NULL;
+
+    insertStoreBaseBoundFunc(pointer_dest, m_void_null_ptr, m_void_null_ptr,
+                             insert_at);
+
+    return;
+  }
+
+  /* if it is a global expression being stored, then add add
+   * suitable base and bound
+   */
+  Value *tmp_base = NULL;
+  Value *tmp_bound = NULL;
+
+  Constant *given_constant = dyn_cast<Constant>(operand);
+  if (given_constant) {
+
+    getConstantExprBaseBound(given_constant, tmp_base, tmp_bound);
+    assert(tmp_base && "global doesn't have base");
+    assert(tmp_bound && "global doesn't have bound");
+  } else {
+    if (!checkBaseBoundPresent(operand)) {
+      return;
+    }
+
+    tmp_base = getAssociatedBase(operand);
+    tmp_bound = getAssociatedBound(operand);
+  }
+
+  // Store the metadata into the metadata space
+  insertStoreBaseBoundFunc(pointer_dest, tmp_base, tmp_bound, insert_at);
+}
 
 void tasmChecking::handleGEP(GetElementPtrInst *gep_inst) {
   Value *getelementptr_operand = gep_inst->getPointerOperand();
@@ -1649,8 +1743,8 @@ void tasmChecking::handleCall(CallInst *call_inst) {
   }
 
   const std::string func_name(func->getName());
-  if (func && isFuncDefTaSMC(func_name)) {
 
+  if (func && isFuncDefTaSMC(func_name)) {
     if (!isa<PointerType>(call_inst->getType())) {
       return;
     }
@@ -1660,7 +1754,7 @@ void tasmChecking::handleCall(CallInst *call_inst) {
 
     return;
   }
-
+  errs() << isFuncDefTaSMC(func_name) << " " << func_name << "\n";
   Instruction *insert_at = getNextInstruction(call_inst);
 
   // calls allocate function  at shadow stack
@@ -1682,7 +1776,17 @@ void tasmChecking::handleExtractValue(ExtractValueInst *) {}
 void tasmChecking::handleExtractElement(ExtractElementInst *) {}
 void tasmChecking::handleSelect(SelectInst *, int) {}
 void tasmChecking::handleIntToPtr(IntToPtrInst *) {}
-void tasmChecking::handleReturnInst(ReturnInst *ret) {}
+void tasmChecking::handleReturnInst(ReturnInst *ret) {
+
+  Value *pointer = ret->getReturnValue();
+  if (pointer == NULL) {
+    return;
+  }
+  if (isa<PointerType>(pointer->getType())) {
+    errs() << "return value is a pointer.\n";
+    insertShadowStackStores(pointer, ret, 0);
+  }
+}
 /****************************************************************************************************************************************/
 /* associate functions */
 /** Method: associateBaseBound
@@ -1727,6 +1831,7 @@ void tasmChecking::dissociateBaseBound(Value *ptr) {
 Value *tasmChecking::getAssociatedBase(Value *ptr) {
 
   // from constant.
+  
   if (isa<Constant>(ptr)) {
     Value *base = NULL;
     Value *bound = NULL;
@@ -1906,6 +2011,9 @@ void tasmChecking::insertShadowStackLoads(Value *ptr_value,
 void tasmChecking::insertShadowStackStores(Value *ptr_value,
                                            Instruction *insert_at, int arg_no) {
 
+  // errs() << " insert store shadowstack: " << arg_no << "\n";
+  // errs() << " Inst: " << *ptr_value << "\n";
+  // errs() << " insert at: " << *insert_at << "\n";
   if (!isa<PointerType>(ptr_value->getType()))
     return;
 
@@ -1943,6 +2051,7 @@ void tasmChecking::insertShadowStackAllocation(CallInst *call_inst) {
 
   // Count the number of pointer arguments and whether a pointer return
   int pointer_args_return = getPtrNumOfArgsAndReturn(call_inst);
+ // errs() << "pointer_args_return: " << pointer_args_return << "\n";
   if (pointer_args_return == 0)
     return;
 
@@ -1981,9 +2090,11 @@ void tasmChecking::insertCallSiteIntroduceShadowStackStores(
   int pointer_arg_no = 1;
 
   CallBase *cs = dyn_cast<CallBase>(call_inst);
+  // errs()<<"function args no: "<<cs->getNumArgOperands()<<"\n";
   for (unsigned i = 0; i < cs->getNumArgOperands(); i++) {
     Value *arg_value = cs->getArgOperand(i);
     if (isa<PointerType>(arg_value->getType())) {
+      errs() << "arg value : " << *arg_value << "\n";
       insertShadowStackStores(arg_value, call_inst, pointer_arg_no);
       pointer_arg_no++;
     }
@@ -2103,7 +2214,7 @@ bool tasmChecking::runOnModule(Module &module) {
        ff_begin != ff_end; ++ff_begin) {
     Function *func_ptr = dyn_cast<Function>(ff_begin);
     assert(func_ptr && "Not a function??");
-    // errs()<<func_ptr->getName();
+  
 
     // if the function from our library, ignore and continue.
     if (!checkIfFunctionOfInterest(func_ptr)) {
@@ -2111,7 +2222,7 @@ bool tasmChecking::runOnModule(Module &module) {
       continue;
     }
     // errs()<<" : yes check...\n";
-
+     errs() << func_ptr->getName() << "\n";
     /** else do three pass
      *  pass1 : gather info
      *  write back some info that needed.

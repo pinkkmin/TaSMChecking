@@ -58,7 +58,7 @@ void _initTaSMC(){
   //printf("_trie_table: %zx\n", (size_t)_trie_table);
   assert(_trie_table != (void *)-1);  
 
-  int* temp = malloc(1);
+  int* temp = (int*)malloc(1);
   //printf("temp:%zx\n", (size_t)temp); 
   _f_allocateSecondaryTrieRange(0, (size_t)temp);
   //printf("debung****************\n"); 
@@ -133,37 +133,37 @@ void _f_callAbort(int type) {
     switch (type)
     {
     case ERROR_POINTER_TYPE:
-        printf(stderr, "abort: pointer type error... ... \n");
+          (stderr, "abort: pointer type error... ... \n");
         break;
     case ERROR_POINTER_KEY:
-        printf(stderr, "abort: pointer key error... ... \n");
+        fprintf(stderr, "abort: pointer key error... ... \n");
         break; 
     case ERROR_FREE_TABLE_USE_UP:
-        printf(stderr, "abort: free able table use up... ... \n");
+        fprintf(stderr, "abort: free able table use up... ... \n");
         break;
     case ERROR_FREE_TABLE_CONFLICT:
-        printf(stderr, "abort: free able table insert key conflict... ... \n");
+        fprintf(stderr, "abort: free able table insert key conflict... ... \n");
         break;
         
     case ERROR_OF_SPATIAL:
-        printf(stderr, "abort: spatial error with check memory... ... \n");
+        fprintf(stderr, "abort: spatial error with check memory... ... \n");
         break;
     case ERROR_OF_TEMPORAL:
-        printf(stderr, "abort: temporal error with check memory... ... \n");
+        fprintf(stderr, "abort: temporal error with check memory... ... \n");
         break;
     case ERROR_VIRTUAL_ADDR:
-        printf(stderr, "abort: virtual address error... ... \n");
+        fprintf(stderr, "abort: virtual address error... ... \n");
         break;
     case ERROR_FUNCTION_POOL_OVERFLOW:
-        printf(stderr, "abort: tasmc initing abort... ... \n");
-        printf(stderr, "abort: tasmc function pools overflow... ... \n");
+        fprintf(stderr, "abort: tasmc initing abort... ... \n");
+        fprintf(stderr, "abort: tasmc function pools overflow... ... \n");
         break;
     case ERROR_FUNCTION_CALLING:
-        printf(stderr, "abort: tasmc function called error... ... \n");
+        fprintf(stderr, "abort: tasmc function called error... ... \n");
         break;
     case ERROR_POINTER_UNKNOW:
     default:
-        printf(stderr, "abort: unknow error... ... \n");
+        fprintf(stderr, "abort: unknow error... ... \n");
         break;
     }
 
@@ -182,7 +182,7 @@ void _f_printfPointerDebug(void* ptr) {
     size_t ptrKey = _f_getPointerKey(ptr);
     size_t ptrAddr = (size_t)_f_maskingPointer(ptr);
 
-    printf("ptr info: value = 0x%x,  ptrType = 0x%x, ptrKey = 0x%x, ptrAddr = 0x%x.\n", &value, &ptrType, &ptrKey, &ptrAddr);
+    printf("ptr info: value = 0x%zx,  ptrType = 0x%zx, ptrKey = 0x%zx, ptrAddr = 0x%zx.\n", value, ptrType, ptrKey, ptrAddr);
     printf("tips: ~ ( ty : 000:heap, 001:stack, 010:global, 011:others ) ! ! !\n\n");
 }
 

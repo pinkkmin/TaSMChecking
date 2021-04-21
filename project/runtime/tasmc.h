@@ -101,7 +101,7 @@ void _f_tasmcPrintf(const char* str, ...);
 void _f_printfPointerDebug(void* ptr);
 void _f_callAbort(int type);
 void* _f_maskingPointer(void* ptr);
-
+void _f_printfPtrBaseBound(void* , void* , void*);
 // for trie table 
 extern _tasmc_trie_entry** _trie_table;
 extern _tasmc_trie_entry* _trie_second_level;
@@ -222,13 +222,13 @@ void _f_incPointerAddr(void* addr_of_ptr, size_t index , size_t ptr_size){
     void* real_add_of_ptr = _f_maskingPointer(addr_of_ptr);
     void* ptr = *((void**)real_add_of_ptr);
     void* realAddr = _f_maskingPointer(ptr);
-    realAddr += index * ptr_size;
+    realAddr = realAddr + (index * ptr_size);
     size_t value = (size_t)realAddr;
     if(value > 0xFFFFFFFFFFFFFFFF || value < 0) {
         _f_callAbort(ERROR_VIRTUAL_ADDR);
     }
 
-    *((void**)real_add_of_ptr) += index * ptr_size;
+    *((void**)real_add_of_ptr) = *((void**)real_add_of_ptr) + (index * ptr_size);
 }
 
 // remember pass &pointer to parameter
@@ -237,13 +237,13 @@ void _f_decPointerAddr(void* addr_of_ptr, size_t index, size_t ptr_size) {
     void* real_add_of_ptr = _f_maskingPointer(addr_of_ptr);
     void* ptr = *((void**)real_add_of_ptr);
     void* realAddr = _f_maskingPointer(ptr);
-    realAddr -= index * ptr_size;
+    realAddr = realAddr-(index * ptr_size);
     size_t value = (size_t)realAddr;
     if(value > 0xFFFFFFFFFFFFFFFF || value < 0) {
         _f_callAbort(ERROR_VIRTUAL_ADDR);
     }
 
-    *((void**)real_add_of_ptr) -= index * ptr_size;
+    *((void**)real_add_of_ptr) = *((void**)real_add_of_ptr) - (index * ptr_size);
 }
 
 /** compare the pointer address
@@ -339,7 +339,7 @@ void* _f_loadBaseOfMetaData(void* addr_of_ptr){
     _tasmc_trie_entry* entry = &secondLevelTrie[secondIndex];
 
     return entry->base;
-}
+}   
 
 void* _f_loadBoundOfMetadata(void* addr_of_ptr) {
     
@@ -356,6 +356,22 @@ void* _f_loadBoundOfMetadata(void* addr_of_ptr) {
     return entry->bound;
 }
 
+void _f_loadMetaData(void* addr_of_ptr, void** addr_of_base, void** addr_of_bound){
+
+    void* real_add_of_ptr = _f_maskingPointer(addr_of_ptr);
+    size_t addr = (size_t)_f_maskingPointer(real_add_of_ptr);
+
+    size_t primayIndex, secondIndex;
+    _tasmc_trie_entry* secondLevelTrie;
+    primayIndex = (addr>>25);
+    secondIndex = (addr>>3) &0x3FFFFF;
+    secondLevelTrie = _trie_table[primayIndex];
+    _tasmc_trie_entry* entry = &secondLevelTrie[secondIndex];
+
+    *((void**) addr_of_base) = entry->base;
+  *((void**) addr_of_bound) = entry->bound;
+
+}
 void _f_storeMetaData(void* addr_of_ptr, void* base, void* bound){
     
     void* real_add_of_ptr = _f_maskingPointer(addr_of_ptr);
@@ -397,6 +413,7 @@ void* _f_loadBaseOfShadowStack(int args_no){
     size_t index = _BASE_INDEX + args_no * _METADATA_NUM_FIELDS + 2;
     size_t* base_ptr = _shadow_stack_ptr + index; 
     void* base = *(void**)base_ptr;
+   
     return base;
 }
 
@@ -407,6 +424,7 @@ void* _f_loadBoundOfShadowStack(int args_no){
     size_t index = _BOUND_INDEX + args_no * _METADATA_NUM_FIELDS + 2;
     size_t* bound_ptr = _shadow_stack_ptr + index; 
     void* bound = *(void**)bound_ptr;    
+   
     return bound;
 }
 
@@ -443,7 +461,7 @@ void _f_allocateShadowStackMetadata(size_t args_no){
      *(_shadow_stack_curr_ptr) = size;
 }
 void _f_deallocateShadowStackMetaData(){
-
+   
     size_t* resStackPtr = _shadow_stack_ptr;
     size_t resStackSize = *((size_t*)resStackPtr);
     printf("resStackSize: %zu\n", resStackSize);
@@ -552,7 +570,7 @@ void _f_checkSpatialStorePtr(void* ptr, void* base, void* bound, size_t size){
 void _f_checkTemporalLoadPtr(void* ptr){
 
    size_t flag =  _f_isFreeAbleOfPointer(ptr);
-   size_t key = _f_getPointerKey(key);
+   size_t key = _f_getPointerKey(ptr);
   //printf("flag: %zx\n", flag);
 
     if(flag != PTR_FREE_ABLE) {
@@ -564,7 +582,7 @@ void _f_checkTemporalLoadPtr(void* ptr){
 void _f_checkTemporalStorePtr(void* ptr) {
 
     size_t flag =  _f_isFreeAbleOfPointer(ptr);
-    size_t key = _f_getPointerKey(key);
+    size_t key = _f_getPointerKey(ptr);
 
     if(flag != PTR_FREE_ABLE) {
        _f_tasmcPrintf("\nTaSMChecking:: temporal store check, invalid pointer key. key = %zx,ptr =%zx\n", key,ptr);

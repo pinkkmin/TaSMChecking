@@ -5,46 +5,59 @@ target triple = "x86_64-unknown-linux-gnu"
 
 @array = dso_local global <{ i32, i32, i32, i32, [96 x i32] }> <{ i32 0, i32 12, i32 3, i32 4, [96 x i32] zeroinitializer }>, align 16
 @ptr = dso_local global i32* bitcast (i8* getelementptr (i8, i8* bitcast (<{ i32, i32, i32, i32, [96 x i32] }>* @array to i8*), i64 4) to i32*), align 8
-@.str = private unnamed_addr constant [54 x i8] c"ptr : %zx, base: %zx, bound : %zx, addr_of_ptr : %zx\0A\00", align 1
+@.str = private unnamed_addr constant [6 x i8] c"****\0A\00", align 1
+@.str.1 = private unnamed_addr constant [11 x i8] c"ptr : %zxn\00", align 1
+@.str.2 = private unnamed_addr constant [6 x i8] c"&&&&\0A\00", align 1
 @arrat_int_ptr = dso_local global [100 x i32*] zeroinitializer, align 16
 
 ; Function Attrs: noinline nounwind optnone uwtable
-define dso_local void @test(i8 signext %0, i32* %1, i32* %2, i32* %3) #0 {
-  %5 = alloca i8, align 1
-  %6 = alloca i32*, align 8
+define dso_local void @test(i8 signext %0, i32* %1, i32* %2, i32* %3, i32 %4) #0 {
+  %6 = alloca i8, align 1
   %7 = alloca i32*, align 8
   %8 = alloca i32*, align 8
   %9 = alloca i32*, align 8
-  %10 = alloca i32*, align 8
+  %10 = alloca i32, align 4
   %11 = alloca i32*, align 8
-  store i8 %0, i8* %5, align 1
-  store i32* %1, i32** %6, align 8
-  store i32* %2, i32** %7, align 8
-  store i32* %3, i32** %8, align 8
+  store i8 %0, i8* %6, align 1
+  store i32* %1, i32** %7, align 8
+  store i32* %2, i32** %8, align 8
+  store i32* %3, i32** %9, align 8
+  store i32 %4, i32* %10, align 4
   %12 = call noalias i8* @malloc(i64 4) #3
   %13 = bitcast i8* %12 to i32*
-  store i32* %13, i32** %9, align 8
-  %14 = load i32*, i32** %9, align 8
-  store i32* %14, i32** %10, align 8
-  %15 = load i32*, i32** %8, align 8
-  store i32* %15, i32** %11, align 8
+  store i32* %13, i32** %11, align 8
+  %14 = call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([6 x i8], [6 x i8]* @.str, i64 0, i64 0))
+  %15 = load i32*, i32** %11, align 8
+  %16 = icmp ne i32* %15, null
+  br i1 %16, label %17, label %21
+
+17:                                               ; preds = %5
+  %18 = load i32*, i32** %11, align 8
+  %19 = ptrtoint i32* %18 to i64
+  %20 = call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([11 x i8], [11 x i8]* @.str.1, i64 0, i64 0), i64 %19)
+  br label %23
+
+21:                                               ; preds = %5
+  %22 = call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([6 x i8], [6 x i8]* @.str.2, i64 0, i64 0))
+  br label %23
+
+23:                                               ; preds = %21, %17
   ret void
 }
 
 ; Function Attrs: nounwind
 declare dso_local noalias i8* @malloc(i64) #1
 
+declare dso_local i32 @printf(i8*, ...) #2
+
 ; Function Attrs: noinline nounwind optnone uwtable
 define dso_local i32 @main() #0 {
   %1 = alloca i32, align 4
   store i32 0, i32* %1, align 4
   %2 = load i32*, i32** @ptr, align 8
-  %3 = ptrtoint i32* %2 to i64
-  %4 = call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([54 x i8], [54 x i8]* @.str, i64 0, i64 0), i64 %3, i64 ptrtoint (<{ i32, i32, i32, i32, [96 x i32] }>* @array to i64), i64 ptrtoint (i32* getelementptr inbounds (i32, i32* getelementptr inbounds ([100 x i32], [100 x i32]* bitcast (<{ i32, i32, i32, i32, [96 x i32] }>* @array to [100 x i32]*), i64 0, i64 0), i64 100) to i64), i64 ptrtoint (i32** @ptr to i64))
+  call void @test(i8 signext 97, i32* getelementptr inbounds ([100 x i32], [100 x i32]* bitcast (<{ i32, i32, i32, i32, [96 x i32] }>* @array to [100 x i32]*), i64 0, i64 0), i32* %2, i32* getelementptr inbounds ([100 x i32], [100 x i32]* bitcast (<{ i32, i32, i32, i32, [96 x i32] }>* @array to [100 x i32]*), i64 0, i64 0), i32 1213)
   ret i32 0
 }
-
-declare dso_local i32 @printf(i8*, ...) #2
 
 attributes #0 = { noinline nounwind optnone uwtable "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "frame-pointer"="all" "less-precise-fpmad"="false" "min-legal-vector-width"="0" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cx8,+fxsr,+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="false" "use-soft-float"="false" }
 attributes #1 = { nounwind "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "frame-pointer"="all" "less-precise-fpmad"="false" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cx8,+fxsr,+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="false" "use-soft-float"="false" }
