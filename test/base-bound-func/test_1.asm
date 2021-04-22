@@ -11,80 +11,67 @@ test:                                   # @test
 	.cfi_offset %rbp, -16
 	movq	%rsp, %rbp
 	.cfi_def_cfa_register %rbp
-	subq	$192, %rsp
+	subq	$128, %rsp
                                         # kill: def $dil killed $dil killed $edi
 	movl	$3, %eax
-	movb	%dil, -81(%rbp)                 # 1-byte Spill
+	movb	%dil, -49(%rbp)                 # 1-byte Spill
 	movl	%eax, %edi
-	movl	%r8d, -88(%rbp)                 # 4-byte Spill
-	movq	%rcx, -96(%rbp)                 # 8-byte Spill
-	movq	%rdx, -104(%rbp)                # 8-byte Spill
-	movq	%rsi, -112(%rbp)                # 8-byte Spill
+	movl	%r8d, -56(%rbp)                 # 4-byte Spill
+	movq	%rcx, -64(%rbp)                 # 8-byte Spill
+	movq	%rdx, -72(%rbp)                 # 8-byte Spill
+	movq	%rsi, -80(%rbp)                 # 8-byte Spill
 	callq	_f_loadBaseOfShadowStack
 	movl	$3, %edi
+	movq	%rax, -88(%rbp)                 # 8-byte Spill
+	callq	_f_loadBoundOfShadowStack
+	movl	$2, %edi
+	movq	%rax, -96(%rbp)                 # 8-byte Spill
+	callq	_f_loadBaseOfShadowStack
+	movl	$2, %edi
+	movq	%rax, -104(%rbp)                # 8-byte Spill
+	callq	_f_loadBoundOfShadowStack
+	movl	$1, %edi
+	movq	%rax, -112(%rbp)                # 8-byte Spill
+	callq	_f_loadBaseOfShadowStack
+	movl	$1, %edi
 	movq	%rax, -120(%rbp)                # 8-byte Spill
 	callq	_f_loadBoundOfShadowStack
-	movl	$2, %edi
-	movq	%rax, -128(%rbp)                # 8-byte Spill
-	callq	_f_loadBaseOfShadowStack
-	movl	$2, %edi
-	movq	%rax, -136(%rbp)                # 8-byte Spill
-	callq	_f_loadBoundOfShadowStack
-	movl	$1, %edi
-	movq	%rax, -144(%rbp)                # 8-byte Spill
-	callq	_f_loadBaseOfShadowStack
-	movl	$1, %edi
-	movq	%rax, -152(%rbp)                # 8-byte Spill
-	callq	_f_loadBoundOfShadowStack
-	movb	-81(%rbp), %r9b                 # 1-byte Reload
-	movb	%r9b, -33(%rbp)
-	movq	-112(%rbp), %rcx                # 8-byte Reload
-	movq	%rcx, -48(%rbp)
-	movq	-104(%rbp), %rdx                # 8-byte Reload
-	movq	%rdx, -56(%rbp)
-	movq	-96(%rbp), %rsi                 # 8-byte Reload
-	movq	%rsi, -64(%rbp)
-	movl	-88(%rbp), %edi                 # 4-byte Reload
-	movl	%edi, -68(%rbp)
-	movl	$4, %r10d
-	movq	%r10, %rdi
-	movq	%rax, -160(%rbp)                # 8-byte Spill
-	callq	malloc
-	movq	%rax, -80(%rbp)
-	movabsq	$.L.str, %rdi
-	movb	$0, %al
-	callq	printf
-	movq	-80(%rbp), %rcx
-	leaq	-80(%rbp), %rdx
-	movq	%rdx, %rdi
-	leaq	-24(%rbp), %rsi
-	leaq	-32(%rbp), %rdx
-	movl	%eax, -164(%rbp)                # 4-byte Spill
-	movq	%rcx, -176(%rbp)                # 8-byte Spill
-	callq	_f_loadMetaData
-	movq	-176(%rbp), %rcx                # 8-byte Reload
-	cmpq	$0, %rcx
-	je	.LBB0_2
-# %bb.1:
-	movq	-80(%rbp), %rsi
-	leaq	-80(%rbp), %rax
-	movq	%rax, %rdi
-	leaq	-8(%rbp), %rax
-	movq	%rsi, -184(%rbp)                # 8-byte Spill
-	movq	%rax, %rsi
+	movb	-49(%rbp), %r9b                 # 1-byte Reload
+	movb	%r9b, -1(%rbp)
+	movq	-80(%rbp), %rcx                 # 8-byte Reload
+	movq	%rcx, -16(%rbp)
 	leaq	-16(%rbp), %rdx
-	callq	_f_loadMetaData
-	movabsq	$.L.str.1, %rdi
-	movq	-184(%rbp), %rsi                # 8-byte Reload
-	movb	$0, %al
-	callq	printf
-	jmp	.LBB0_3
-.LBB0_2:
-	movabsq	$.L.str.2, %rdi
-	movb	$0, %al
-	callq	printf
-.LBB0_3:
-	addq	$192, %rsp
+	movq	%rdx, %rdi
+	movq	-120(%rbp), %rsi                # 8-byte Reload
+	movq	%rax, %rdx
+	callq	_f_storeMetaData
+	movq	-72(%rbp), %rax                 # 8-byte Reload
+	movq	%rax, -24(%rbp)
+	leaq	-24(%rbp), %rcx
+	movq	%rcx, %rdi
+	movq	-104(%rbp), %rsi                # 8-byte Reload
+	movq	-112(%rbp), %rdx                # 8-byte Reload
+	callq	_f_storeMetaData
+	movq	-64(%rbp), %rax                 # 8-byte Reload
+	movq	%rax, -32(%rbp)
+	leaq	-32(%rbp), %rcx
+	movq	%rcx, %rdi
+	movq	-88(%rbp), %rsi                 # 8-byte Reload
+	movq	-96(%rbp), %rdx                 # 8-byte Reload
+	callq	_f_storeMetaData
+	movl	-56(%rbp), %r8d                 # 4-byte Reload
+	movl	%r8d, -36(%rbp)
+	movl	$4, %edi
+	callq	malloc
+	xorl	%r8d, %r8d
+	movl	%r8d, %ecx
+	movq	%rax, -48(%rbp)
+	leaq	-48(%rbp), %rax
+	movq	%rax, %rdi
+	movq	%rcx, %rsi
+	movq	%rcx, %rdx
+	callq	_f_storeMetaData
+	addq	$128, %rsp
 	popq	%rbp
 	.cfi_def_cfa %rsp, 8
 	retq
@@ -209,22 +196,6 @@ ptr:
 	.quad	array+4
 	.size	ptr, 8
 
-	.type	.L.str,@object                  # @.str
-	.section	.rodata.str1.1,"aMS",@progbits,1
-.L.str:
-	.asciz	"****\n"
-	.size	.L.str, 6
-
-	.type	.L.str.1,@object                # @.str.1
-.L.str.1:
-	.asciz	"ptr : %zxn"
-	.size	.L.str.1, 11
-
-	.type	.L.str.2,@object                # @.str.2
-.L.str.2:
-	.asciz	"&&&&\n"
-	.size	.L.str.2, 6
-
 	.type	arrat_int_ptr,@object           # @arrat_int_ptr
 	.bss
 	.globl	arrat_int_ptr
@@ -241,7 +212,6 @@ arrat_int_ptr:
 	.addrsig
 	.addrsig_sym test
 	.addrsig_sym malloc
-	.addrsig_sym printf
 	.addrsig_sym _f_loadBaseOfShadowStack
 	.addrsig_sym _f_storeBaseOfShadowStack
 	.addrsig_sym _f_storeBoundOfShadowStack

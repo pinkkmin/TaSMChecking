@@ -186,6 +186,10 @@ void _f_printfPointerDebug(void* ptr) {
     printf("tips: ~ ( ty : 000:heap, 001:stack, 010:global, 011:others ) ! ! !\n\n");
 }
 
+void _f_debugPrinfInfo(){
+  printf("[TASMC: debug output....... \n");
+}
+
 void _f_tasmcPrintf(const char* str, ...)
 {
   va_list args;

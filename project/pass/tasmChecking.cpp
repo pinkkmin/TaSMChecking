@@ -96,6 +96,10 @@ private:
   Function *m_f_allocateFunctionKey;
   Function *m_f_freeFunctionKey;
   Function *m_f_initFunctionKeyPool;
+
+  // debug function
+  Function *m_f_debugPrinfInfo;
+
   // ... ...
 public:
   static char ID;
@@ -150,7 +154,7 @@ public:
   void handleIndirectCall(CallInst *);
   void handleExtractValue(ExtractValueInst *); // 提取
   void handleExtractElement(ExtractElementInst *);
-  void handleSelect(SelectInst *, int);
+  void handleSelect(SelectInst *);
   void handleIntToPtr(IntToPtrInst *);
   void handleReturnInst(ReturnInst *); // yes
 
@@ -194,6 +198,12 @@ public:
   void addTasmcRtFunctionToMap();                  // yes
   Instruction *getNextInstruction(Instruction *);  // yes
   bool checkBaseBoundPresent(Value *); // yes: pointer is present in maps.
+
+  // debug calls
+  void insertCallSiteDebugFunc(Instruction *insert_at) {
+    SmallVector<Value *, 8> args;
+    CallInst::Create(m_f_debugPrinfInfo, args, "", insert_at);
+  }
 };
 } // namespace
 
@@ -363,6 +373,9 @@ void tasmChecking::constructPointerHandlers(Module &module) {
 // copy by softboundcets
 void tasmChecking::constructOthersHandlers(Module &module) {
 
+  // debug function
+  module.getOrInsertFunction("_f_debugPrinfInfo", VoidTy);
+  //
   module.getOrInsertFunction("_tasmc_global_init", VoidTy);
 
   Function *initGlobalFunc = module.getFunction("_tasmc_global_init");
@@ -541,7 +554,11 @@ void tasmChecking::getPointerFunctions(Module &module) {
   assert(m_f_initFunctionKeyPool && "m_f_initFunctionKeyPool is NULL ? ");
 }
 
-void tasmChecking::getOthersFunctions(Module &module) {}
+void tasmChecking::getOthersFunctions(Module &module) {
+
+  m_f_debugPrinfInfo = module.getFunction("_f_debugPrinfInfo");
+  assert(m_f_debugPrinfInfo && "m_f_debugPrinfInfo is NULL ? ");
+}
 /**********************************************************************************************************************************/
 // construct Handlers initing
 void tasmChecking::constructHandlers(Module &module) {
@@ -742,7 +759,7 @@ void tasmChecking::scanfFirstPass(Function *func) {
         SelectInst *select_insn = dyn_cast<SelectInst>(v1);
         assert(select_insn && "Not a select inst?");
         int pass = 1;
-        handleSelect(select_insn, pass);
+        handleSelect(select_insn);
       } break;
 
       case Instruction::Store: {
@@ -787,7 +804,79 @@ void tasmChecking::scanfFirstPass(Function *func) {
 
 void tasmChecking::scanfSecondPass(Function *func) {
 
-  // do nothing.
+  std::set<BasicBlock *> bb_visited;
+  std::queue<BasicBlock *> bb_worklist;
+  Function::iterator bb_begin = func->begin();
+
+  BasicBlock *bb = dyn_cast<BasicBlock>(bb_begin);
+  assert(bb && "Not a basic block and gathering base bound in the next pass?");
+  bb_worklist.push(bb);
+
+  while (bb_worklist.size() != 0) {
+
+    bb = bb_worklist.front();
+    assert(bb && "Not a BasicBlock?");
+
+    bb_worklist.pop();
+    if (bb_visited.count(bb)) {
+      continue;
+    }
+
+    bb_visited.insert(bb);
+
+    for (succ_iterator si = succ_begin(bb), se = succ_end(bb); si != se; ++si) {
+
+      BasicBlock *next_bb = *si;
+      assert(
+          next_bb &&
+          "Not a basic block and I am adding to the base and bound worklist?");
+      bb_worklist.push(next_bb);
+    }
+
+    for (BasicBlock::iterator i = bb->begin(), ie = bb->end(); i != ie; ++i) {
+      Value *v1 = dyn_cast<Value>(i);
+      Instruction *new_inst = dyn_cast<Instruction>(i);
+
+      // If the instruction is not present in the original, do nothing.
+      if (!m_present_in_original.count(v1))
+        continue;
+
+      switch (new_inst->getOpcode()) {
+
+      case Instruction::GetElementPtr: {
+        GetElementPtrInst *gep_inst = dyn_cast<GetElementPtrInst>(v1);
+        assert(gep_inst && "Not a GEP instruction?");
+        handleGEP(gep_inst);
+      } break;
+
+      case Instruction::Store: {
+        StoreInst *store_inst = dyn_cast<StoreInst>(v1);
+        assert(store_inst && "Not a Store instruction?");
+        handleStore(store_inst);
+      } break;
+
+      case Instruction::PHI: {
+        PHINode *phi_node = dyn_cast<PHINode>(v1);
+        assert(phi_node && "Not a PHINode?");
+        handlePHIPass2(phi_node);
+      } break;
+
+      case BitCastInst::BitCast: {
+        BitCastInst *bitcast_inst = dyn_cast<BitCastInst>(v1);
+        assert(bitcast_inst && "Not a bitcast instruction?");
+        handleBitCast(bitcast_inst);
+      } break;
+
+      case SelectInst::Select: {
+      } break;
+
+      default:
+        break;
+      } /* Switch Ends */
+
+    } /* BasicBlock iterator Ends */
+
+  } /* Function iterator Ends */
 }
 
 void tasmChecking::insertDereferenceCheck(Function *func) {
@@ -1656,6 +1745,8 @@ void tasmChecking::handleVectorStore(StoreInst *inst) {}
 
 void tasmChecking::handleStore(StoreInst *store_inst) {
 
+  // errs() << "Store Inst: " << *store_inst << "\n";
+
   Value *operand = store_inst->getOperand(0);
   Value *pointer_dest = store_inst->getOperand(1);
   Instruction *insert_at = getNextInstruction(store_inst);
@@ -1721,7 +1812,35 @@ void tasmChecking::handleBitCast(BitCastInst *bitcast_inst) {
   propagateMetadata(pointer_operand, bitcast_inst);
 }
 
-void tasmChecking::handlePHIPass1(PHINode *) {}
+// copy form: softbound/cets
+// Method: handlePHIPass1()
+//
+// Description:
+//
+// This function creates a PHINode for the metadata in the bitcode for
+// pointer PHINodes. It is important to note that this function just
+// creates the PHINode and does not populate the incoming values of
+// the PHINode, which is handled by the handlePHIPass2.
+void tasmChecking::handlePHIPass1(PHINode *phi_node) {
+
+  if (!isa<PointerType>(phi_node->getType()))
+    return;
+
+  unsigned num_incoming_values = phi_node->getNumIncomingValues();
+  PHINode *base_phi_node = PHINode::Create(m_void_ptr_type, num_incoming_values,
+                                           "phi.base", phi_node);
+
+  PHINode *bound_phi_node = PHINode::Create(
+      m_void_ptr_type, num_incoming_values, "phi.bound", phi_node);
+
+  Value *base_phi_node_value = base_phi_node;
+  Value *bound_phi_node_value = bound_phi_node;
+
+  associateBaseBound(phi_node, base_phi_node_value, bound_phi_node_value);
+
+  // todo:temporal
+}
+
 void tasmChecking::handlePHIPass2(PHINode *) {}
 
 void tasmChecking::handleCall(CallInst *call_inst) {
@@ -1772,10 +1891,125 @@ void tasmChecking::handleCall(CallInst *call_inst) {
 }
 void tasmChecking::handleMemcpy(CallInst *) {}
 void tasmChecking::handleIndirectCall(CallInst *) {}
-void tasmChecking::handleExtractValue(ExtractValueInst *) {}
-void tasmChecking::handleExtractElement(ExtractElementInst *) {}
-void tasmChecking::handleSelect(SelectInst *, int) {}
-void tasmChecking::handleIntToPtr(IntToPtrInst *) {}
+void tasmChecking::handleExtractValue(ExtractValueInst *EVI) {
+
+  if (isa<PointerType>(EVI->getType())) {
+    assert(0 &&
+           "ExtractValue is returning a pointer, possibly some vectorization "
+           "going on, not handled, try running with O0 or O1 or O2");
+  }
+
+  associateBaseBound(EVI, m_void_null_ptr, m_infinite_bound_ptr);
+  // todo: temporal
+}
+
+// extractelement指令从指定的向量中提取单个标量元素，有两个操作数，第一个是向量类型；第二个是一个向量索引。
+void tasmChecking::handleExtractElement(ExtractElementInst *EE_inst) {
+
+  if (!isa<PointerType>(EE_inst->getType()))
+    return;
+  Value *EEIOperand = EE_inst->getOperand(0);
+
+  // if(isa<VectorType>(EEIOperand->getType())){
+
+  //   if(!m_vector_pointer_lock.count(EEIOperand) ||
+  //      !m_vector_pointer_base.count(EEIOperand) ||
+  //      !m_vector_pointer_bound.count(EEIOperand) ||
+  //      !m_vector_pointer_key.count(EEIOperand)){
+  //     assert(0 && "Extract element does not have vector metadata");
+  //   }
+
+  //   Constant* index = dyn_cast<Constant>(EEI->getOperand(1));
+
+  //   Value* vector_base = m_vector_pointer_base[EEIOperand];
+  //   Value* vector_bound = m_vector_pointer_bound[EEIOperand];
+  //   Value* vector_key = m_vector_pointer_key[EEIOperand];
+  //   Value* vector_lock = m_vector_pointer_lock[EEIOperand];
+
+  //   Value* ptr_base = ExtractElementInst::Create(vector_base, index, "",
+  //   EEI); Value* ptr_bound = ExtractElementInst::Create(vector_bound, index,
+  //   "", EEI); Value* ptr_key = ExtractElementInst::Create(vector_key, index,
+  //   "", EEI); Value* ptr_lock = ExtractElementInst::Create(vector_lock,
+  //   index, "", EEI);
+
+  //   associateBaseBound(EEI, ptr_base, ptr_bound);
+  //   return;
+  // }
+}
+
+// Method: handleSelect
+//
+// This function propagates the metadata with Select IR instruction.
+// Select  instruction is also handled in two passes.
+void tasmChecking::handleSelect(SelectInst *select_ins) {
+
+  if (!isa<PointerType>(select_ins->getType()))
+    return;
+
+  Value *condition = select_ins->getOperand(0);
+  Value *operand_base[2];
+  Value *operand_bound[2];
+  for (unsigned m = 0; m < 2; m++) {
+
+    Value *operand = select_ins->getOperand(m + 1);
+    operand_base[m] = NULL;
+    operand_bound[m] = NULL;
+
+    // do Spatial
+    if (checkBaseBoundPresent(operand)) {
+      operand_base[m] = getAssociatedBase(operand);
+      operand_bound[m] = getAssociatedBound(operand);
+    }
+
+    if (isa<ConstantPointerNull>(operand) && !checkBaseBoundPresent(operand)) {
+      operand_base[m] = m_void_null_ptr;
+      operand_bound[m] = m_void_null_ptr;
+    }
+
+    Constant *given_constant = dyn_cast<Constant>(operand);
+    if (given_constant) {
+      getConstantExprBaseBound(given_constant, operand_base[m],
+                               operand_bound[m]);
+    }
+    assert(operand_base[m] != NULL && "operand doesn't have base with select?");
+    assert(operand_bound[m] != NULL &&
+           "operand doesn't have bound with select?");
+
+    // Introduce a bit cast if the types don't match
+    if (operand_base[m]->getType() != m_void_ptr_type) {
+      operand_base[m] = new BitCastInst(operand_base[m], m_void_ptr_type,
+                                        "select.base", select_ins);
+    }
+
+    if (operand_bound[m]->getType() != m_void_ptr_type) {
+      operand_bound[m] = new BitCastInst(operand_bound[m], m_void_ptr_type,
+                                         "select_bound", select_ins);
+    }
+
+    // todo : Temporal
+  }
+
+  SelectInst *select_base = SelectInst::Create(
+      condition, operand_base[0], operand_base[1], "select.base", select_ins);
+
+  SelectInst *select_bound =
+      SelectInst::Create(condition, operand_bound[0], operand_bound[1],
+                         "select.bound", select_ins);
+
+  associateBaseBound(select_ins, select_base, select_bound);
+
+  // todo: temporal
+}
+
+void tasmChecking::handleIntToPtr(IntToPtrInst *inttoptr_inst) {
+
+  Value *inst = inttoptr_inst;
+
+  associateBaseBound(inst, m_void_null_ptr, m_void_null_ptr);
+
+  // todo: temporal
+}
+
 void tasmChecking::handleReturnInst(ReturnInst *ret) {
 
   Value *pointer = ret->getReturnValue();
@@ -1831,7 +2065,7 @@ void tasmChecking::dissociateBaseBound(Value *ptr) {
 Value *tasmChecking::getAssociatedBase(Value *ptr) {
 
   // from constant.
-  
+
   if (isa<Constant>(ptr)) {
     Value *base = NULL;
     Value *bound = NULL;
@@ -2051,7 +2285,7 @@ void tasmChecking::insertShadowStackAllocation(CallInst *call_inst) {
 
   // Count the number of pointer arguments and whether a pointer return
   int pointer_args_return = getPtrNumOfArgsAndReturn(call_inst);
- // errs() << "pointer_args_return: " << pointer_args_return << "\n";
+  // errs() << "pointer_args_return: " << pointer_args_return << "\n";
   if (pointer_args_return == 0)
     return;
 
@@ -2094,7 +2328,7 @@ void tasmChecking::insertCallSiteIntroduceShadowStackStores(
   for (unsigned i = 0; i < cs->getNumArgOperands(); i++) {
     Value *arg_value = cs->getArgOperand(i);
     if (isa<PointerType>(arg_value->getType())) {
-      errs() << "arg value : " << *arg_value << "\n";
+      // errs() << "arg value : " << *arg_value << "\n";
       insertShadowStackStores(arg_value, call_inst, pointer_arg_no);
       pointer_arg_no++;
     }
@@ -2214,7 +2448,6 @@ bool tasmChecking::runOnModule(Module &module) {
        ff_begin != ff_end; ++ff_begin) {
     Function *func_ptr = dyn_cast<Function>(ff_begin);
     assert(func_ptr && "Not a function??");
-  
 
     // if the function from our library, ignore and continue.
     if (!checkIfFunctionOfInterest(func_ptr)) {
@@ -2222,7 +2455,7 @@ bool tasmChecking::runOnModule(Module &module) {
       continue;
     }
     // errs()<<" : yes check...\n";
-     errs() << func_ptr->getName() << "\n";
+    errs() << func_ptr->getName() << "\n";
     /** else do three pass
      *  pass1 : gather info
      *  write back some info that needed.

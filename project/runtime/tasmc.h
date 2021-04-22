@@ -391,7 +391,7 @@ void _f_storeMetaData(void* addr_of_ptr, void* base, void* bound){
     entry->base = base;
     entry->bound = bound;
     // debug output info:
-    _f_printfPtrBaseBound(addr_of_ptr, base, bound);
+    // _f_printfPtrBaseBound(addr_of_ptr, base, bound);
 
     // printf("*******************************************\n");
     // printf("bound: %zx\n", (size_t)bound);
@@ -464,7 +464,7 @@ void _f_deallocateShadowStackMetaData(){
    
     size_t* resStackPtr = _shadow_stack_ptr;
     size_t resStackSize = *((size_t*)resStackPtr);
-    printf("resStackSize: %zu\n", resStackSize);
+    //printf("resStackSize: %zu\n", resStackSize);
     assert((resStackSize >=0 && resStackSize <= _SHADOW_STACK_N_ENTRIES));
 
     _shadow_stack_ptr -= (2 + resStackSize);

@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
-
+ 
 int array[100] = {0, 12, 3, 4};
 
 int *arrat_int_ptr[100];
@@ -22,10 +22,6 @@ void test(char ch, int array[10], int *ptr, int arr[12],int cc) {
   int *p;
   
   p = (int *)malloc(sizeof(int));
-  printf("****\n");
-  if(p != NULL)
-  printf("ptr : %zxn",(size_t)p);
-  else printf("&&&&\n");
   // int *q;
   // q = p;
   // int *r = arr;
