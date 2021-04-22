@@ -61,6 +61,7 @@ private:
   Function *m_f_checkSpatialStorePtr;
   Function *m_f_checkTemporalLoadPtr;
   Function *m_f_checkTemporalStorePtr;
+  Function *m_f_checkDereferencePtr;
 
   // load metadata
   Function *m_f_loadBaseOfMetaData;
@@ -125,8 +126,8 @@ public:
   void getFunctions(Module &);
 
   /* gather info functions  */
-  void scanfFirstPass(Function *); // yes
-  void scanfSecondPass(Function *);
+  void scanfFirstPass(Function *);  // yes
+  void scanfSecondPass(Function *); // yes
   void insertDereferenceCheck(Function *);
 
   void transformMainFunc(Module &);            // yes
@@ -138,6 +139,10 @@ public:
                                 Instruction *);       // yes
   void propagateMetadata(Value *, Instruction *);     // yes
   void addMemcopyMemsetCheck(CallInst *, Function *); // no
+
+  // insert check function
+  void insertLoadStoreChecks(Instruction *);
+  void insertTemporalChecks(Instruction *, std::map<Value *, int> &);
 
   /* handler llvm ir functions */
   void handleAlloca(AllocaInst *, BasicBlock *, BasicBlock::iterator &); // yes
@@ -272,6 +277,10 @@ void tasmChecking::constructCheckHandlers(Module &module) {
 
   // void _f_checkTemporalStorePtr(void* ptr)
   module.getOrInsertFunction("_f_checkTemporalStorePtr", VoidTy, VoidPtrTy);
+
+  // void _f_checkDereferencePtr(void* base, void* bound, void* ptr)
+  module.getOrInsertFunction("_f_checkDereferencePtr", VoidTy, VoidPtrTy,
+                             VoidPtrTy, VoidPtrTy);
 }
 
 void tasmChecking::constructMetadataHandlers(Module &module) {
@@ -459,6 +468,9 @@ void tasmChecking::getCheckFunctions(Module &module) {
 
   m_f_checkTemporalStorePtr = module.getFunction("_f_checkTemporalStorePtr");
   assert(m_f_checkTemporalStorePtr && "m_f_checkTemporalStorePtr is NULL ? ");
+
+  m_f_checkDereferencePtr = module.getFunction("_f_checkDereferencePtr");
+  assert(m_f_checkDereferencePtr && "m_f_checkDereferencePtr is NULL ? ");
 }
 
 void tasmChecking::getMetadataFunctions(Module &module) {
@@ -599,14 +611,17 @@ void tasmChecking::initializeVariables(Module &module) {
 
 // 有问题
 Value *tasmChecking::getSizeOfType(Type *input_type) {
+
   // Create a Constant Pointer Null of the input type.  Then get a
   // getElementPtr of it with next element access cast it to unsigned
   // int
+  errs()<<"input_type: "<<*input_type<<"\n";
   const PointerType *ptr_type = dyn_cast<PointerType>(input_type);
-
-  if (isa<FunctionType>(ptr_type->getElementType())) {
+   
+  if (ptr_type && isa<FunctionType>(ptr_type->getElementType())) {
     return ConstantInt::get(Type::getInt64Ty(ptr_type->getContext()), 0);
   }
+
   Constant *int64_size = NULL;
   StructType *struct_type = dyn_cast<StructType>(input_type);
 
@@ -625,7 +640,8 @@ Value *tasmChecking::getSizeOfType(Type *input_type) {
     int64_size = ConstantExpr::getSizeOf(input_type);
     return int64_size;
   }
-
+  
+  
   int64_size = ConstantExpr::getSizeOf(input_type);
   return int64_size;
 }
@@ -880,7 +896,126 @@ void tasmChecking::scanfSecondPass(Function *func) {
 }
 
 void tasmChecking::insertDereferenceCheck(Function *func) {
-  // do nothing.
+
+  if (func->isVarArg())
+    return;
+
+  // the Inst that neeed to check.
+  std::vector<Instruction *> CheckWorkList;
+
+  // identify all the instructions where we need to insert the spatial checks
+  for (inst_iterator i = inst_begin(func), e = inst_end(func); i != e; ++i) {
+
+    Instruction *I = &*i;
+
+    if (!m_present_in_original.count(I)) {
+      continue;
+    }
+    // care about Load and Store
+    // whatever where the pointer to, only the operator of load(store) pointer
+    // need to add checker.
+    if (isa<LoadInst>(I) || isa<StoreInst>(I)) {
+      CheckWorkList.push_back(I);
+    }
+    if (isa<AtomicCmpXchgInst>(I) || isa<AtomicRMWInst>(I)) {
+      assert(0 && "Atomic Instructions not handled");
+    }
+  }
+
+  // WorkList Algorithm
+  std::set<BasicBlock *> bb_visited;
+  std::queue<BasicBlock *> bb_worklist;
+  Function::iterator bb_begin = func->begin();
+
+  BasicBlock *bb = dyn_cast<BasicBlock>(bb_begin);
+  assert(bb && "Not a basic block  and I am adding dereference checks?");
+  bb_worklist.push(bb);
+
+  while (bb_worklist.size() != 0) {
+
+    bb = bb_worklist.front();
+    assert(bb && "Not a BasicBlock?");
+    bb_worklist.pop();
+
+    if (bb_visited.count(bb))
+      continue;
+
+    bb_visited.insert(bb);
+
+    /* Iterating over the successors and adding the successors to
+     * the worklist
+     */
+    for (succ_iterator si = succ_begin(bb), se = succ_end(bb); si != se; ++si) {
+
+      BasicBlock *next_bb = *si;
+      assert(
+          next_bb &&
+          "Not a basic block and I am adding to the base and bound worklist?");
+      bb_worklist.push(next_bb);
+    }
+
+    // Iterating over BasicBLock
+    for (BasicBlock::iterator i = bb->begin(), ie = bb->end(); i != ie; ++i) {
+      Value *v1 = dyn_cast<Value>(i);
+      Instruction *new_inst = dyn_cast<Instruction>(i);
+
+      /* Do the dereference check stuff */
+      if (!m_present_in_original.count(v1))
+        continue;
+
+      if (isa<LoadInst>(new_inst)) {
+        insertLoadStoreChecks(new_inst);
+        // todo : insert temporal
+        continue;
+      }
+
+      if (isa<StoreInst>(new_inst)) {
+        insertLoadStoreChecks(new_inst);
+        // todo : insert temporal
+        continue;
+      }
+
+      /* check call through function pointers */
+      if (isa<CallInst>(new_inst)) {
+
+        SmallVector<Value *, 8> args;
+        CallInst *call_inst = dyn_cast<CallInst>(new_inst);
+        Value *tmp_base = NULL;
+        Value *tmp_bound = NULL;
+
+        assert(call_inst && "call instruction null?");
+
+        /* here implies its an indirect call */
+        Function *fun = call_inst->getCalledFunction();
+        if (fun) {
+          continue;
+        }
+
+        Value *indirect_func_called = call_inst->getOperand(0);
+        //errs() << "operad: " << *indirect_func_called << "\n";
+        Constant *func_constant = dyn_cast<Constant>(indirect_func_called);
+        if (func_constant) {
+          getConstantExprBaseBound(func_constant, tmp_base, tmp_bound);
+        } else {
+          tmp_base = getAssociatedBase(indirect_func_called);
+          tmp_bound = getAssociatedBound(indirect_func_called);
+        }
+        /* Add BitCast Instruction for the base */
+         Value *pointer_operand_value =
+            castToVoidPtr(indirect_func_called, new_inst);
+        args.push_back(pointer_operand_value);
+        Value *bitcast_base = castToVoidPtr(tmp_base, new_inst);
+        args.push_back(bitcast_base);
+
+        /* Add BitCast Instruction for the bound */
+        Value *bitcast_bound = castToVoidPtr(tmp_bound, new_inst);
+        args.push_back(bitcast_bound);
+       
+        CallInst::Create(m_f_checkDereferencePtr, args, "", new_inst);
+        continue;
+      } /* Call check ends */
+    }
+  }
 }
 void tasmChecking::transformMainFunc(Module &module) {
 
@@ -1012,6 +1147,7 @@ void tasmChecking::getConstantExprBaseBound(Constant *given_constant,
     }
     } // Switch ends
   } else {
+    // errs() << "gv: " << *given_constant << "\n";
     Value *cexpr_ = given_constant->getOperand(0);
 
     if (isa<ConstantExpr>(cexpr_)) {
@@ -1043,6 +1179,7 @@ void tasmChecking::getConstantExprBaseBound(Constant *given_constant,
       Constant *index_base0 = Constant::getNullValue(
           Type::getInt32Ty(given_constant->getType()->getContext()));
       // Constructor to create a '0' constant
+
       Constant *index_bound0 = ConstantInt::get(
           Type::getInt32Ty(given_constant->getType()->getContext()), 1);
       indices_base.push_back(index_base0);
@@ -1253,6 +1390,7 @@ void tasmChecking::addBaseBoundGlobals(Module &module) {
       Value *operand_bound = NULL;
       getConstantExprBaseBound(gv, operand_base, operand_bound);
       Instruction *init_gv_inst = getGlobalInitInstruction(module);
+      
       insertStoreBaseBoundFunc(gv, operand_base, operand_bound, init_gv_inst);
 
       continue;
@@ -1542,6 +1680,7 @@ void tasmChecking::addTasmcRtFunctionToMap() {
   m_func_def_tasmc["_f_checkSpatialStorePtr"] = true;
   m_func_def_tasmc["_f_checkTemporalLoadPtr"] = true;
   m_func_def_tasmc["_f_checkTemporalStorePtr"] = true;
+  m_func_def_tasmc["_f_checkDereferencePtr"] = true;
   m_func_def_tasmc["_f_cmpPointerAddr"] = true;
   m_func_def_tasmc["_f_copyMetaData"] = true;
   m_func_def_tasmc["_f_deallocatePointer"] = true;
@@ -1672,6 +1811,112 @@ bool tasmChecking::checkBaseBoundPresent(Value *ptr) {
   return false;
 }
 /****************************************************************************************************************************************/
+// insert check function
+
+/** Method: addLoadStoreChecks
+ *
+ * Description: inserts calls to the spatial safety check functions,elides the
+ * check if the map says it is not necessary to check.
+ *
+ * calls: void _f_checkSpatialLoadPtr(void* ptr, void* base, void* bound, size_t
+ * size) calls: void _f_checkSpatialStorePtr(void* ptr, void* base, void* bound,
+ * size_t size)
+ */
+void tasmChecking::insertLoadStoreChecks(Instruction *Inst) {
+
+
+  errs()<<" insert load store: "<<*Inst<<"\n";
+  SmallVector<Value *, 8> args;
+  Value *pointer_operand = NULL;
+  Value *pointer_to = NULL;
+  if (isa<LoadInst>(Inst)) {
+
+    LoadInst *ldi = dyn_cast<LoadInst>(Inst);
+    assert(ldi && "not a load instruction");
+    pointer_operand = ldi->getPointerOperand();
+    pointer_to = ldi;
+  }
+
+  if (isa<StoreInst>(Inst)) {
+
+    StoreInst *sti = dyn_cast<StoreInst>(Inst);
+    assert(sti && "not a store instruction");
+    // The pointer where the element is being stored is the second
+    // operand
+    pointer_operand = sti->getOperand(1);
+    pointer_to = sti->getOperand(0);
+  }
+
+  assert(pointer_operand && "pointer operand null?");
+
+  // If it is a null pointer which is being loaded, then it must seg
+  // fault, no dereference check here
+  // Segmentation fault (core dumped)
+
+  // Iterate over the uses
+  // maybe nothing.
+  for (Value::use_iterator ui = pointer_operand->use_begin(),
+                           ue = pointer_operand->use_end();
+       ui != ue; ++ui) {
+
+    Instruction *temp_inst = dyn_cast<Instruction>(*ui);
+    if (!temp_inst)
+      continue;
+
+    if (temp_inst == Inst)
+      continue;
+
+    if (!isa<LoadInst>(temp_inst) && !isa<StoreInst>(temp_inst))
+      continue;
+
+    if (isa<StoreInst>(temp_inst)) {
+      if (temp_inst->getOperand(1) != pointer_operand) {
+        // When a pointer is a being stored at at a particular
+        // address, don't elide the check
+        continue;
+      }
+    }
+  } // Iterating over uses ends
+
+  Value *tmp_base = NULL;
+  Value *tmp_bound = NULL;
+
+  Constant *given_constant = dyn_cast<Constant>(pointer_operand);
+  if (given_constant) {
+    getConstantExprBaseBound(given_constant, tmp_base, tmp_bound);
+  } else {
+    tmp_base = getAssociatedBase(pointer_operand);
+    tmp_bound = getAssociatedBound(pointer_operand);
+  }
+  
+
+  Value *cast_pointer_operand_value = castToVoidPtr(pointer_operand, Inst);
+  args.push_back(cast_pointer_operand_value);
+
+  Value *bitcast_base = castToVoidPtr(tmp_base, Inst);
+  args.push_back(bitcast_base);
+
+  Value *bitcast_bound = castToVoidPtr(tmp_bound, Inst);
+  args.push_back(bitcast_bound);
+
+  Type *pointer_operand_type = pointer_to->getType();
+  
+  Value *size_of_type = getSizeOfType(pointer_operand_type);
+  args.push_back(size_of_type);
+  
+  errs()<<"ptr: "<<*cast_pointer_operand_value<<"\n";
+  errs()<<"base: "<<*bitcast_base<<"\n";
+  errs()<<"bound: "<<*bitcast_bound<<"\n";
+  if (isa<LoadInst>(Inst)) {
+    CallInst::Create(m_f_checkSpatialLoadPtr, args, "", Inst);
+  } else {
+    CallInst::Create(m_f_checkSpatialStorePtr, args, "", Inst);
+  }
+
+  return;
+}
+
+/****************************************************************************************************************************************/
 /* handler llvm ir functions */
 
 void tasmChecking::handleAlloca(AllocaInst *alloca_inst, BasicBlock *bb,
@@ -1745,12 +1990,10 @@ void tasmChecking::handleVectorStore(StoreInst *inst) {}
 
 void tasmChecking::handleStore(StoreInst *store_inst) {
 
-  // errs() << "Store Inst: " << *store_inst << "\n";
-
   Value *operand = store_inst->getOperand(0);
   Value *pointer_dest = store_inst->getOperand(1);
   Instruction *insert_at = getNextInstruction(store_inst);
-
+ // errs() << "Store Inst: " << *store_inst << "\n";
   if (isa<VectorType>(operand->getType())) {
     const VectorType *vector_ty = dyn_cast<VectorType>(operand->getType());
     if (isa<PointerType>(vector_ty->getElementType())) {
@@ -1764,7 +2007,7 @@ void tasmChecking::handleStore(StoreInst *store_inst) {
    */
   if (!isa<PointerType>(operand->getType()))
     return;
-
+ // errs() << "YES: Store Inst \n";
   if (isa<ConstantPointerNull>(operand)) {
     /* it is a constant pointer null being stored
      * store null to the shadow space

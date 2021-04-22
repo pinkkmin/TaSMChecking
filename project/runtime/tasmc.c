@@ -148,6 +148,9 @@ void _f_callAbort(int type) {
     case ERROR_OF_SPATIAL:
         fprintf(stderr, "abort: spatial error with check memory... ... \n");
         break;
+    case ERROR_OF_SPATIAL_SDC:
+        fprintf(stderr, "abort: spatial error with   store ... ... \n");
+        break;
     case ERROR_OF_TEMPORAL:
         fprintf(stderr, "abort: temporal error with check memory... ... \n");
         break;
@@ -160,6 +163,9 @@ void _f_callAbort(int type) {
         break;
     case ERROR_FUNCTION_CALLING:
         fprintf(stderr, "abort: tasmc function called error... ... \n");
+        break;
+    case ERROR_OF_DEREFERENCE:
+        fprintf(stderr, "abort: tasmc dereference errors... ... \n");
         break;
     case ERROR_POINTER_UNKNOW:
     default:
@@ -211,7 +217,7 @@ int main(int argc, char **argv){
   int retValue;
   char** new_argv = argv;
   
-  printf("debug: running in runtime library main()\n");
+  //printf("debug: running in runtime library main()\n");
   retValue = _f_pseudoMain(argc, new_argv);
   return retValue;
 }

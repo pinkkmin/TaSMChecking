@@ -372,7 +372,7 @@ void _f_loadMetaData(void* addr_of_ptr, void** addr_of_base, void** addr_of_boun
   *((void**) addr_of_bound) = entry->bound;
 
 }
-void _f_storeMetaData(void* addr_of_ptr, void* base, void* bound){
+void _f_storeMetaData(void* addr_of_ptr, void* base, void* bound){  
     
     void* real_add_of_ptr = _f_maskingPointer(addr_of_ptr);
     size_t addr = (size_t)_f_maskingPointer(real_add_of_ptr);
@@ -391,7 +391,7 @@ void _f_storeMetaData(void* addr_of_ptr, void* base, void* bound){
     entry->base = base;
     entry->bound = bound;
     // debug output info:
-    // _f_printfPtrBaseBound(addr_of_ptr, base, bound);
+     _f_printfPtrBaseBound(addr_of_ptr, base, bound);
 
     // printf("*******************************************\n");
     // printf("bound: %zx\n", (size_t)bound);
@@ -547,7 +547,7 @@ void _f_copyMetaData(void* addr_of_from, void* addr_of_dest){
 
 // checking temporal and spatital， dereference
 void _f_checkSpatialLoadPtr(void* ptr, void* base, void* bound, size_t size){
-
+    printf("size: %zx\n",size);
     void* addr = _f_maskingPointer(ptr);
     if ((addr < base) || ((void*)(addr + size) > bound)) {
         _f_tasmcPrintf("\nTaSMChecking:: In  Load Dereference Checking, base=%zx, bound=%zx, ptr=%zx\n",
@@ -557,14 +557,22 @@ void _f_checkSpatialLoadPtr(void* ptr, void* base, void* bound, size_t size){
 }
 
 void _f_checkSpatialStorePtr(void* ptr, void* base, void* bound, size_t size){
-
-    void* addr = _f_maskingPointer(ptr);
+    printf("size: %zx\n",size);
+    void* addr = _f_maskingPointer(ptr);    
     if ((addr < base) || ((void*)(addr + size) > bound)) {
         _f_tasmcPrintf("\nTaSMChecking:: In  Store Dereference Checking, base=%zx, bound=%zx, ptr=%zx\n",
-    			   base, bound, ptr);  
-                   _f_callAbort(ERROR_OF_SPATIAL_SDC);
+    			   (size_t)base, (size_t)bound, (size_t)ptr);  
+        _f_callAbort(ERROR_OF_SPATIAL_SDC);
     }
 
+}
+
+void _f_checkDereferencePtr(void* ptr,void* base, void* bound) {
+
+  if ((base != bound) && (ptr != base)) {
+      _f_tasmcPrintf("In Call Dereference Check, base=%zx, bound=%zx, ptr=%zx \n", (size_t)base, (size_t)bound, (size_t)ptr);
+    _f_callAbort(ERROR_OF_DEREFERENCE);
+  } 
 }
 
 void _f_checkTemporalLoadPtr(void* ptr){
@@ -618,6 +626,7 @@ void _f_printfPtrBaseBound(void* addr_of_ptr, void* base, void* bound){
     void *ptr = *((void**)addr_of_ptr);
     printf("[ tasmc debug ] ");
     printf(" ptr: %zx, ", (size_t)ptr);
+    printf(" *ptr: %d, ", (*(int*)ptr));
     printf(" base: %zx, ", (size_t)base);
     printf(" bound : %zx, ", (size_t)bound);
     printf(" addr_of_ptr : %zx \n", (size_t)addr_of_ptr);

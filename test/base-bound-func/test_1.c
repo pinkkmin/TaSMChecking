@@ -12,24 +12,27 @@ typedef struct test_1 {
   int a;
 } struct_;
 
-void test(char ch, int array[10], int *ptr, int arr[12],int cc) {
-  //*arrat_int_ptr[11] = 12;
+// void test(char ch, int array[10], int *ptr, int arr[12],int cc) {
+//   //*arrat_int_ptr[11] = 12;
 
-  // size_t value_of_array = (size_t)(array);
-  //  printf("value_of_array : %zx\n",value_of_array);
-  //  printf("addr_of_array : %zx\n",(size_t)(&array));
-  //  printf("value_of_array[0] : %zx\n",(size_t)(array[0]));
-  int *p;
+//   // size_t value_of_array = (size_t)(array);
+//   //  printf("value_of_array : %zx\n",value_of_array);
+//   //  printf("addr_of_array : %zx\n",(size_t)(&array));
+//   //  printf("value_of_array[0] : %zx\n",(size_t)(array[0]));
+//   // int *p;
   
-  p = (int *)malloc(sizeof(int));
-  // int *q;
-  // q = p;
-  // int *r = arr;
-}
+//   // p = (int *)malloc(sizeof(int));
+//   // int *q;
+//   // q = p;
+//   // int *r = arr;
+// }
 int main() {
 
-  // printf("ptr : %zx, base: %zx, bound : %zx, addr_of_ptr : %zx\n", (size_t)ptr,
-  //        (size_t)array, (size_t)(array + 100), (size_t)(&ptr));
-  test('a', array, ptr, array, 1213);
+  // printf("ptr : %zx, base : %zx, bound : %zx, addr_of_ptr : %zx\n", (size_t)ptr,
+  //        (size_t)array, (size_t)(array + 88), (size_t)(&ptr));
+  *ptr = 18;
+ // test('a', array, ptr, array, 1213);
+  // int b=12;
+  // int ad = b;
   return 0;
 }
