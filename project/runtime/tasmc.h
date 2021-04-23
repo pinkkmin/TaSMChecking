@@ -546,7 +546,8 @@ void _f_copyMetaData(void* addr_of_from, void* addr_of_dest){
 }
 
 // checking temporal and spatital， dereference
-void _f_checkSpatialLoadPtr(void* ptr, void* base, void* bound, size_t size){
+void _f_checkSpatialLoadPtr(void* addr_of_ptr, void* base, void* bound, size_t size){
+    void* ptr = *((void**)addr_of_ptr);
     printf("size: %zx\n",size);
     void* addr = _f_maskingPointer(ptr);
     if ((addr < base) || ((void*)(addr + size) > bound)) {

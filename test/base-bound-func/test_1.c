@@ -5,7 +5,7 @@ int array[100] = {0, 12, 3, 4};
 
 int *arrat_int_ptr[100];
 
-int *ptr = &array[1];
+int *ptr = &array[4];
 typedef struct test_1 {
   /* data */
   char ch;
