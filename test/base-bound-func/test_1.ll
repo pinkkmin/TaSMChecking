@@ -4,15 +4,17 @@ target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16
 target triple = "x86_64-unknown-linux-gnu"
 
 @array = dso_local global <{ i32, i32, i32, i32, [96 x i32] }> <{ i32 0, i32 12, i32 3, i32 4, [96 x i32] zeroinitializer }>, align 16
-@ptr = dso_local global i32* bitcast (i8* getelementptr (i8, i8* bitcast (<{ i32, i32, i32, i32, [96 x i32] }>* @array to i8*), i64 16) to i32*), align 8
+@ptr = dso_local global i32* bitcast (i8* getelementptr (i8, i8* bitcast (<{ i32, i32, i32, i32, [96 x i32] }>* @array to i8*), i64 1600) to i32*), align 8
 @arrat_int_ptr = dso_local global [100 x i32*] zeroinitializer, align 16
 
 ; Function Attrs: noinline nounwind optnone uwtable
 define dso_local i32 @main() #0 {
   %1 = alloca i32, align 4
+  %2 = alloca i32, align 4
   store i32 0, i32* %1, align 4
-  %2 = load i32*, i32** @ptr, align 8
-  store i32 18, i32* %2, align 4
+  %3 = load i32*, i32** @ptr, align 8
+  %4 = load i32, i32* %3, align 4
+  store i32 %4, i32* %2, align 4
   ret i32 0
 }
 

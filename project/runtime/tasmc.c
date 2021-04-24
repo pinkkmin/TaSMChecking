@@ -151,6 +151,9 @@ void _f_callAbort(int type) {
     case ERROR_OF_SPATIAL_SDC:
         fprintf(stderr, "abort: spatial error with   store ... ... \n");
         break;
+    case ERROR_OF_SPATIAL_LDC:
+        fprintf(stderr, "abort: spatial error with   load ... ... \n");
+        break;
     case ERROR_OF_TEMPORAL:
         fprintf(stderr, "abort: temporal error with check memory... ... \n");
         break;
@@ -181,15 +184,15 @@ void _f_callAbort(int type) {
     abort();
 }
 
-void _f_printfPointerDebug(void* ptr) {
+void _f_printfPointerDebug(void* ptr) {   
 
     size_t value = (size_t)ptr;
     size_t ptrType = _f_getPointerType(ptr);
     size_t ptrKey = _f_getPointerKey(ptr);
     size_t ptrAddr = (size_t)_f_maskingPointer(ptr);
 
-    printf("ptr info: value = 0x%zx,  ptrType = 0x%zx, ptrKey = 0x%zx, ptrAddr = 0x%zx.\n", value, ptrType, ptrKey, ptrAddr);
-    printf("tips: ~ ( ty : 000:heap, 001:stack, 010:global, 011:others ) ! ! !\n\n");
+    printf("[TaSMC Debug] value = 0x%zx, ptrType = 0x%zx, ptrKey = 0x%zx, ptrAddr = 0x%zx.\n", value, ptrType, ptrKey, ptrAddr);
+    //printf("tips: ~ ( ty : 000:heap, 001:stack, 010:global, 011:others ) ! ! !\n\n");
 }
 
 void _f_debugPrinfInfo(){

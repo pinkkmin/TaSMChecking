@@ -391,7 +391,7 @@ void _f_storeMetaData(void* addr_of_ptr, void* base, void* bound){
     entry->base = base;
     entry->bound = bound;
     // debug output info:
-     _f_printfPtrBaseBound(addr_of_ptr, base, bound);
+    // _f_printfPtrBaseBound(addr_of_ptr, base, bound);
 
     // printf("*******************************************\n");
     // printf("bound: %zx\n", (size_t)bound);
@@ -546,23 +546,22 @@ void _f_copyMetaData(void* addr_of_from, void* addr_of_dest){
 }
 
 // checking temporal and spatital， dereference
-void _f_checkSpatialLoadPtr(void* addr_of_ptr, void* base, void* bound, size_t size){
-    void* ptr = *((void**)addr_of_ptr);
-    printf("size: %zx\n",size);
+void _f_checkSpatialLoadPtr(void* ptr, void* base, void* bound, size_t size){
+   
     void* addr = _f_maskingPointer(ptr);
     if ((addr < base) || ((void*)(addr + size) > bound)) {
-        _f_tasmcPrintf("\nTaSMChecking:: In  Load Dereference Checking, base=%zx, bound=%zx, ptr=%zx\n",
-    			   base, bound, ptr);  
+        _f_tasmcPrintf("\nTaSMChecking:: In  Load Dereference Checking, ptr=%zx, base=%zx, bound=%zx\n",
+        ptr,base, bound);  
                    _f_callAbort(ERROR_OF_SPATIAL_LDC);
     }
 }
 
 void _f_checkSpatialStorePtr(void* ptr, void* base, void* bound, size_t size){
-    printf("size: %zx\n",size);
+   
     void* addr = _f_maskingPointer(ptr);    
     if ((addr < base) || ((void*)(addr + size) > bound)) {
-        _f_tasmcPrintf("\nTaSMChecking:: In  Store Dereference Checking, base=%zx, bound=%zx, ptr=%zx\n",
-    			   (size_t)base, (size_t)bound, (size_t)ptr);  
+        _f_tasmcPrintf("\nTaSMChecking:: In  Store Dereference Checking, ptr=%zx, base=%zx, bound=%zx\n",
+        ptr, base, bound);  
         _f_callAbort(ERROR_OF_SPATIAL_SDC);
     }
 

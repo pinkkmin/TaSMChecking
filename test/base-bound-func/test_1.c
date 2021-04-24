@@ -5,7 +5,7 @@ int array[100] = {0, 12, 3, 4};
 
 int *arrat_int_ptr[100];
 
-int *ptr = &array[4];
+int *ptr = &array[400];
 typedef struct test_1 {
   /* data */
   char ch;
@@ -27,12 +27,11 @@ typedef struct test_1 {
 //   // int *r = arr;
 // }
 int main() {
-
+  
+  int aa = *ptr;
   // printf("ptr : %zx, base : %zx, bound : %zx, addr_of_ptr : %zx\n", (size_t)ptr,
   //        (size_t)array, (size_t)(array + 88), (size_t)(&ptr));
-  *ptr = 18;
+ 
  // test('a', array, ptr, array, 1213);
-  // int b=12;
-  // int ad = b;
   return 0;
 }

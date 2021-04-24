@@ -101,6 +101,7 @@ private:
   // debug function
   Function *m_f_debugPrinfInfo;
   Function *m_f_printfPointerDebug;
+  Function *m_f_printfBaseBoundDebug;
 
   // ... ...
 public:
@@ -215,6 +216,12 @@ public:
     SmallVector<Value *, 8> args;
     args.push_back(ptr);
     CallInst::Create(m_f_printfPointerDebug, args, "", insert_at);
+  }
+
+  void insertCallSiteDebugPtrBaseBound(SmallVector<Value *, 8> args,
+                                       Instruction *insert_at) {
+
+    CallInst::Create(m_f_printfBaseBoundDebug, args, "", insert_at);
   }
 };
 } // namespace
@@ -392,6 +399,8 @@ void tasmChecking::constructOthersHandlers(Module &module) {
   // debug function
   module.getOrInsertFunction("_f_debugPrinfInfo", VoidTy);
   module.getOrInsertFunction("_f_printfPointerDebug", VoidTy, VoidPtrTy);
+  module.getOrInsertFunction("_f_printfPtrBaseBound", VoidTy, VoidPtrTy,
+                             VoidPtrTy, VoidPtrTy);
 
   //
   module.getOrInsertFunction("_tasmc_global_init", VoidTy);
@@ -582,6 +591,9 @@ void tasmChecking::getOthersFunctions(Module &module) {
 
   m_f_printfPointerDebug = module.getFunction("_f_printfPointerDebug");
   assert(m_f_printfPointerDebug && "m_f_printfPointerDebug is NULL ? ");
+
+  m_f_printfBaseBoundDebug = module.getFunction("_f_printfPtrBaseBound");
+  assert(m_f_printfBaseBoundDebug && "m_f_printfBaseBoundDebug is NULL ? ");
 }
 /**********************************************************************************************************************************/
 // construct Handlers initing
@@ -627,7 +639,7 @@ Value *tasmChecking::getSizeOfType(Type *input_type) {
   // Create a Constant Pointer Null of the input type.  Then get a
   // getElementPtr of it with next element access cast it to unsigned
   // int
-  errs() << "input_type: " << *input_type << "\n";
+  // errs() << "input_type: " << *input_type << "\n";
   const PointerType *ptr_type = dyn_cast<PointerType>(input_type);
 
   if (ptr_type && isa<FunctionType>(ptr_type->getElementType())) {
@@ -1124,6 +1136,7 @@ void tasmChecking::identifyOriginalInst(Function *func) {
 void tasmChecking::getConstantExprBaseBound(Constant *given_constant,
                                             Value *&tmp_base,
                                             Value *&tmp_bound) {
+
   if (isa<ConstantPointerNull>(given_constant)) {
     tmp_base = m_void_null_ptr;
     tmp_bound = m_void_null_ptr;
@@ -1158,59 +1171,57 @@ void tasmChecking::getConstantExprBaseBound(Constant *given_constant,
     }
     } // Switch ends
   } else {
-    // errs() << "gv: " << *given_constant << "\n";
-    Value *cexpr_ = given_constant->getOperand(0);
+    errs() << "gv: " << *given_constant << "\n";
+    // Value *cexpr_ = given_constant->getOperand(0);
 
-    if (isa<ConstantExpr>(cexpr_)) {
-      Constant *gv_ = dyn_cast<Constant>(cexpr_);
-      getConstantExprBaseBound(gv_, tmp_base, tmp_bound);
-    } else {
-      const PointerType *func_ptr_type =
-          dyn_cast<PointerType>(given_constant->getType());
+    // if (isa<ConstantExpr>(cexpr_)) {
+    //   Constant *gv_ = dyn_cast<Constant>(cexpr_);
+    //   getConstantExprBaseBound(gv_, tmp_base, tmp_bound);
+    // } else {
+    const PointerType *func_ptr_type =
+        dyn_cast<PointerType>(given_constant->getType());
 
-      if (isa<FunctionType>(func_ptr_type->getElementType())) {
-        tmp_base = m_void_null_ptr;
-        tmp_bound = m_infinite_bound_ptr;
-        return;
-      }
-      // Create getElementPtrs to create the base and bound
-
-      std::vector<Constant *> indices_base;
-      std::vector<Constant *> indices_bound;
-
-      GlobalVariable *gv = dyn_cast<GlobalVariable>(given_constant);
-
-      // TODO: External globals get zero base and infinite_bound
-      if (gv && !gv->hasInitializer()) {
-        tmp_base = m_void_null_ptr;
-        tmp_bound = m_infinite_bound_ptr;
-        return;
-      }
-
-      Constant *index_base0 = Constant::getNullValue(
-          Type::getInt32Ty(given_constant->getType()->getContext()));
-      // Constructor to create a '0' constant
-
-      Constant *index_bound0 = ConstantInt::get(
-          Type::getInt32Ty(given_constant->getType()->getContext()), 1);
-      indices_base.push_back(index_base0);
-
-      // indices_bound.push_back(index_base0);
-      // indices_bound.push_back(index_bound1);
-      indices_bound.push_back(index_bound0);
-
-      Constant *gep_base =
-          ConstantExpr::getGetElementPtr(nullptr, given_constant, indices_base);
-      Constant *gep_bound = ConstantExpr::getGetElementPtr(
-          nullptr, given_constant, indices_bound);
-
-      tmp_base = gep_base;
-      tmp_bound = gep_bound;
-      // errs() << "\n****************************************************\n";
-      // errs() << "base: " << *tmp_base << "\n";
-      // errs() << "bound: " << *tmp_bound << "\n";
-      // errs() << "****************************************************\n";
+    if (isa<FunctionType>(func_ptr_type->getElementType())) {
+      tmp_base = m_void_null_ptr;
+      tmp_bound = m_infinite_bound_ptr;
+      return;
     }
+    // Create getElementPtrs to create the base and bound
+
+    std::vector<Constant *> indices_base;
+    std::vector<Constant *> indices_bound;
+
+    GlobalVariable *gv = dyn_cast<GlobalVariable>(given_constant);
+
+    // TODO: External globals get zero base and infinite_bound
+    if (gv && !gv->hasInitializer()) {
+      tmp_base = m_void_null_ptr;
+      tmp_bound = m_infinite_bound_ptr;
+      return;
+    }
+
+    Constant *index_base0 = Constant::getNullValue(
+        Type::getInt32Ty(given_constant->getType()->getContext()));
+    // Constructor to create a '0' constant
+
+    Constant *index_bound0 = ConstantInt::get(
+        Type::getInt32Ty(given_constant->getType()->getContext()), 1);
+    indices_base.push_back(index_base0);
+
+    indices_bound.push_back(index_bound0);
+
+    Constant *gep_base =
+        ConstantExpr::getGetElementPtr(nullptr, given_constant, indices_base);
+    Constant *gep_bound =
+        ConstantExpr::getGetElementPtr(nullptr, given_constant, indices_bound);
+
+    tmp_base = gep_base;
+    tmp_bound = gep_bound;
+    // errs() << "\n****************************************************\n";
+    // errs() << "base: " << *tmp_base << "\n";
+    // errs() << "bound: " << *tmp_bound << "\n";
+    // errs() << "****************************************************\n";
+    // }
   }
 }
 
@@ -1399,7 +1410,9 @@ void tasmChecking::addBaseBoundGlobals(Module &module) {
       // errs() << "***************************************** \n";
       Value *operand_base = NULL;
       Value *operand_bound = NULL;
-      getConstantExprBaseBound(gv, operand_base, operand_bound);
+      Value *initializer = gv->getInitializer();
+      Constant *given_constant = dyn_cast<Constant>(initializer);
+      getConstantExprBaseBound(given_constant, operand_base, operand_bound);
       Instruction *init_gv_inst = getGlobalInitInstruction(module);
 
       insertStoreBaseBoundFunc(gv, operand_base, operand_bound, init_gv_inst);
@@ -1468,6 +1481,7 @@ void tasmChecking::insertMetadataLoad(LoadInst *load_inst) {
 
   Value *load_inst_value = load_inst;
   Value *pointer_operand = load_inst->getPointerOperand();
+
   Instruction *load = load_inst;
 
   Instruction *insert_at = getNextInstruction(load);
@@ -1500,6 +1514,8 @@ void tasmChecking::insertMetadataLoad(LoadInst *load_inst) {
       new LoadInst(m_void_ptr_type, base_alloca, "base.load", insert_at);
   Instruction *bound_load =
       new LoadInst(m_void_ptr_type, bound_alloca, "bound.load", insert_at);
+
+  // insertCallSiteDebugPrintPtrfFunc(pointer_operand_bitcast, load_inst);
   associateBaseBound(load_inst_value, base_load, bound_load);
 }
 
@@ -1711,6 +1727,8 @@ void tasmChecking::addTasmcRtFunctionToMap() {
   m_func_def_tasmc["_f_malloc"] = true;
   m_func_def_tasmc["_f_maskingPointer"] = true;
   m_func_def_tasmc["_f_printfPointerDebug"] = true;
+  m_func_def_tasmc["_f_printfPtrBaseBound"] = true;
+
   // m_func_def_tasmc["_f_pseudoMain"] = true;
 
   m_func_def_tasmc["_f_removePtrFromFreeTable"] = true;
@@ -1843,8 +1861,8 @@ void tasmChecking::insertLoadStoreChecks(Instruction *Inst) {
     assert(ldi && "not a load instruction");
     pointer_operand = ldi->getPointerOperand();
     pointer_to = ldi;
-   
-    errs() << " load : " << *pointer_operand << "\n";
+
+    // insertCallSiteDebugPrintPtrfFunc(pointer_operand, Inst);
   }
 
   if (isa<StoreInst>(Inst)) {
@@ -1894,6 +1912,19 @@ void tasmChecking::insertLoadStoreChecks(Instruction *Inst) {
   Constant *given_constant = dyn_cast<Constant>(pointer_operand);
   if (given_constant) {
     getConstantExprBaseBound(given_constant, tmp_base, tmp_bound);
+
+    // errs() << "yes is gv\n";
+    // errs() << "Inst:" << *Inst << "\n";
+    // errs() << "given_constant: " << *given_constant << "\n";
+    //  errs() << "tmp_bound" << *tmp_bound << "\n";
+    // Value *cast_pointer_operand_value = castToVoidPtr(given_constant, Inst);
+    // insertCallSiteDebugPrintPtrfFunc(cast_pointer_operand_value, Inst);
+    // Value *bitcast_base = castToVoidPtr(tmp_base, Inst);
+    // args.push_back(bitcast_base);
+
+    // Value *bitcast_bound = castToVoidPtr(tmp_bound, Inst);
+    // insertCallSiteDebugPrintPtrfFunc(bitcast_base, Inst);
+    // insertCallSiteDebugPrintPtrfFunc(bitcast_bound, Inst);
   } else {
     tmp_base = getAssociatedBase(pointer_operand);
     tmp_bound = getAssociatedBound(pointer_operand);
@@ -1913,9 +1944,6 @@ void tasmChecking::insertLoadStoreChecks(Instruction *Inst) {
   Value *size_of_type = getSizeOfType(pointer_operand_type);
   args.push_back(size_of_type);
 
-  errs() << "ptr: " << *cast_pointer_operand_value << "\n";
-  errs() << "base: " << *bitcast_base << "\n";
-  errs() << "bound: " << *bitcast_bound << "\n";
   if (isa<LoadInst>(Inst)) {
     CallInst::Create(m_f_checkSpatialLoadPtr, args, "", Inst);
   } else {
@@ -2016,7 +2044,7 @@ void tasmChecking::handleStore(StoreInst *store_inst) {
    */
   if (!isa<PointerType>(operand->getType()))
     return;
-  // errs() << "YES: Store Inst \n";
+
   if (isa<ConstantPointerNull>(operand)) {
     /* it is a constant pointer null being stored
      * store null to the shadow space
@@ -2269,7 +2297,7 @@ void tasmChecking::handleReturnInst(ReturnInst *ret) {
     return;
   }
   if (isa<PointerType>(pointer->getType())) {
-    errs() << "return value is a pointer.\n";
+    /// errs() << "return value is a pointer.\n";
     insertShadowStackStores(pointer, ret, 0);
   }
 }
