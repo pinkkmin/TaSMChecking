@@ -1410,7 +1410,7 @@ void tasmChecking::addBaseBoundGlobals(Module &module) {
       // errs() << "***************************************** \n";
       Value *operand_base = NULL;
       Value *operand_bound = NULL;
-      Value *initializer = gv->getInitializer();
+      Value *initializer = gv-> getInitializer();
       Constant *given_constant = dyn_cast<Constant>(initializer);
       getConstantExprBaseBound(given_constant, operand_base, operand_bound);
       Instruction *init_gv_inst = getGlobalInitInstruction(module);
