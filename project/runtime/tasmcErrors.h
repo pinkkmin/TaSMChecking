@@ -23,8 +23,13 @@
 #define ERROR_OF_TEMPORAL 21
 #define ERROR_OF_SPATIAL_LDC  22 // load dereference check
 #define ERROR_OF_SPATIAL_SDC  23 // store dereference check
-#define ERROR_OF_TEMPORAL_LDC 24
-#define ERROR_OF_TEMPORAL_SDC 25
+#define ERROR_OF_TEMPORAL_LDC 240
+#define ERROR_OF_TEMPORAL_SDC 250
+#define ERROR_OF_TEMPORAL_LRS 241 // load return stack
+#define ERROR_OF_TEMPORAL_SRS 252 //   store return stack
+#define ERROR_OF_UNFREE_ABLE 212  // free variable in stack.
+#define ERROR_OF_FREE 213  // free  errors
+
 #define ERROR_OF_DEREFERENCE 26
 
 #define ERROR_FUNCTION_POOL_OVERFLOW 30

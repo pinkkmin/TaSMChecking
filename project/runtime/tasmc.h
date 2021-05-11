@@ -57,6 +57,17 @@
 #define PTR_FREE_ABLE 1
 #define PTR_FREE_UNABLE 0
 
+// type of memory
+// heap(1) stack(010) global(011) others(000)
+#define TYPE_HEAP 1
+#define TYPE_STACK 2
+#define TYPE_GLOBAL 3
+#define TYPE_OTHERS 0
+
+// check pointer key with function key . in stack.
+#define PTR_KEY_OK 1
+#define PTR_KEY_FAIL 0
+
 typedef struct 
 {
     /* data */
@@ -108,7 +119,8 @@ extern _tasmc_trie_entry* _trie_second_level;
 extern size_t* _function_key_pool;
 // for free able table
 extern size_t* _free_able_table;
-size_t ptrKeyCounter = 0; // loop allocate：ptrKey
+size_t ptrKeyCounter = 1; // loop allocate：ptrKey
+size_t functionKey = 1; // 
 // for shadow stack : 当函数参数为指针时，通过shadow stack 传递指针base和bound
 /*
 ******************
@@ -151,7 +163,7 @@ void _tasmc_global_init()
 }
 
 /**  
- * pointerType: heap(000) stack(001) global(010) others(011)
+ * pointerType: heap(001) stack(010) global(011) others(000)
  * highter 3 bits of pointer(63~61bit)
  * */
 size_t _f_getPointerType(void* ptr){
@@ -299,18 +311,23 @@ void* _f_typeCasePointer(void* ptr) {
     return _f_maskingPointer(ptr);
 }
 
+
+/*********************************************************************************************************/
+// function key for temporal in stack.
+
 size_t _f_allocateFunctionKey(size_t functionId) {
-     *(_function_key_pool + functionId) += 1;
-     size_t newFunctionKey = *(_function_key_pool + functionId);
-     assert((newFunctionKey >= 0xFFFFFFFFFFFFFFF) && "functionKey using up... ...");
-     return newFunctionKey;
+     *(_function_key_pool + functionId) = functionKey++;
+     if(functionKey == 8192) functionKey = 1;
+
+     size_t key = *(_function_key_pool + functionId);
+     return key;
 }
 
 void _f_freeFunctionKey(size_t functionId) {
     size_t functionKey =  *(_function_key_pool + functionId);
     if(functionKey <= 0) _f_callAbort(ERROR_FUNCTION_CALLING);
 
-    *(_function_key_pool + functionId) -= 1;
+    *(_function_key_pool + functionId) -= 0;
 }
 
 void _f_initFunctionKeyPool(size_t functionNums){
@@ -323,6 +340,24 @@ void _f_initFunctionKeyPool(size_t functionNums){
         *(_function_key_pool + id) = 0;
     }
 
+}
+
+size_t _f_getFunctionKey(size_t functionId) {
+
+    size_t functionKey =  *(_function_key_pool + functionId);
+
+    if(functionKey <= 0) _f_callAbort(ERROR_FUNCTION_CALLING);
+    return functionKey;
+}
+
+size_t _f_checkPtrKeyWithFuncKey(void* ptr, size_t function_id){
+
+    size_t funcKey = _f_getFunctionKey(function_id);
+    size_t ptrKey = _f_getPointerKey(ptr);
+
+    if(funcKey ==  ptrKey) return PTR_KEY_OK;
+    
+    return PTR_KEY_FAIL;
 }
 /*******************************************************************************************************/
 
@@ -477,7 +512,8 @@ size_t _f_allocatePtrKey(){
     size_t ans = -1;
     if(isUse != 1) {
       ans = ptrKeyCounter++;
-      ptrKeyCounter %= (_FREE_ABLE_TABLE_N_KEY-1);
+      if(ptrKeyCounter >= _FREE_ABLE_TABLE_N_KEY)
+      ptrKeyCounter %= 1;
     }else {
         for( size_t index = 0; index < _FREE_ABLE_TABLE_N_KEY; ++index) {
             if(*(_free_able_table + index) != 1) {
@@ -523,7 +559,7 @@ void _f_addPtrToFreeTable(size_t ptrKey) {
  **/
 void _f_removePtrFromFreeTable(void* ptr) {
 
-    assert(ptr!=NULL);
+    assert(ptr != NULL);
     size_t ptrKey = _f_getPointerKey(ptr);
     _f_setPtrFreeFlagToFAT(ptrKey, PTR_FREE_UNABLE);
 }
@@ -575,26 +611,51 @@ void _f_checkDereferencePtr(void* ptr,void* base, void* bound) {
   } 
 }
 
-void _f_checkTemporalLoadPtr(void* ptr){
+void _f_checkTemporalLoadPtr(void* ptr, size_t functionId){
 
-   size_t flag =  _f_isFreeAbleOfPointer(ptr);
    size_t key = _f_getPointerKey(ptr);
-  //printf("flag: %zx\n", flag);
+   size_t type = _f_getPointerType(ptr);
 
-    if(flag != PTR_FREE_ABLE) {
-        _f_tasmcPrintf("\nTaSMChecking:: temporal load check, invalid pointer key. key = %zx,ptr =%zx\n", key, ptr);
-        _f_callAbort(ERROR_OF_TEMPORAL_LDC);  
+   if(type == TYPE_HEAP) {
+       size_t flag =  _f_isFreeAbleOfPointer(ptr);
+       //printf("flag: %zx\n", flag);
+       if(flag != PTR_FREE_ABLE){ 
+           _f_tasmcPrintf("\n TaSMChecking:: temporal load check, invalid pointer key. key = %zx,ptr =%zx\n", key, ptr);
+           _f_callAbort(ERROR_OF_TEMPORAL_LDC);
+       }  
+    }
+    else {  // stack,global ...
+        size_t status = _f_checkPtrKeyWithFuncKey(ptr, functionId);
+        if(status != PTR_KEY_OK) {
+            size_t functionKey = _f_getFunctionKey(functionId);
+           _f_tasmcPrintf("\n TaSMChecking:: temporal load check, invalid pointer key. key = %zx,functionKey=%zx,ptr =%zx\n", 
+                key,functionKey, ptr);
+           _f_callAbort(ERROR_OF_TEMPORAL_LRS);
+        }
     }
 }
 
-void _f_checkTemporalStorePtr(void* ptr) {
+void _f_checkTemporalStorePtr(void* ptr, size_t functionId) {
 
-    size_t flag =  _f_isFreeAbleOfPointer(ptr);
     size_t key = _f_getPointerKey(ptr);
+    size_t type = _f_getPointerType(ptr);
 
-    if(flag != PTR_FREE_ABLE) {
-       _f_tasmcPrintf("\nTaSMChecking:: temporal store check, invalid pointer key. key = %zx,ptr =%zx\n", key,ptr);
-     _f_callAbort(ERROR_OF_TEMPORAL_SDC);  
+    if(type == TYPE_HEAP) {
+       size_t flag =  _f_isFreeAbleOfPointer(ptr);
+
+       if(flag != PTR_FREE_ABLE){ 
+           _f_tasmcPrintf("\n TaSMChecking:: temporal load check, invalid pointer key. key = %zx,ptr =%zx\n", key, ptr);
+           _f_callAbort(ERROR_OF_TEMPORAL_SDC);
+       }  
+    }
+    else {  // stack,global ...
+        size_t status = _f_checkPtrKeyWithFuncKey(ptr, functionId);
+        if(status != PTR_KEY_OK) {
+            size_t functionKey = _f_getFunctionKey(functionId);
+           _f_tasmcPrintf("\n TaSMChecking:: temporal load check, invalid pointer key. key = %zx,functionKey=%zx,ptr =%zx\n", 
+                key,functionKey, ptr);
+           _f_callAbort(ERROR_OF_TEMPORAL_SRS);
+        }
     }
 }
 

@@ -121,7 +121,19 @@ void* _f_malloc(size_t size){
 
 void _f_free(void* ptr){
 
+  size_t flag = _f_isFreeAbleOfPointer(ptr);
+  size_t ty = _f_getPointerType(ptr);
+  
+  // only hep can free
+  if(ty != TYPE_HEAP) _f_callAbort(ERROR_OF_UNFREE_ABLE);
+
+  // is free able ?
+  if(flag != PTR_FREE_ABLE) _f_callAbort(ERROR_OF_FREE);
+  
   void* realPtrAddr = _f_maskingPointer(ptr);
+
+  // remove ptr from free_able_pool
+  _f_removePtrFromFreeTable(ptr);
   free(realPtrAddr);
 }
 
@@ -144,18 +156,29 @@ void _f_callAbort(int type) {
     case ERROR_FREE_TABLE_CONFLICT:
         fprintf(stderr, "abort: free able table insert key conflict... ... \n");
         break;
-        
     case ERROR_OF_SPATIAL:
         fprintf(stderr, "abort: spatial error with check memory... ... \n");
         break;
     case ERROR_OF_SPATIAL_SDC:
-        fprintf(stderr, "abort: spatial error with   store ... ... \n");
+        fprintf(stderr, "abort: spatial error with store ... ... \n");
         break;
     case ERROR_OF_SPATIAL_LDC:
-        fprintf(stderr, "abort: spatial error with   load ... ... \n");
+        fprintf(stderr, "abort: spatial error with load ... ... \n");
         break;
     case ERROR_OF_TEMPORAL:
         fprintf(stderr, "abort: temporal error with check memory... ... \n");
+        break;
+    case ERROR_OF_TEMPORAL_LDC:
+        fprintf(stderr, "abort: temporal error with load... ... \n");
+        break;
+    case ERROR_OF_TEMPORAL_SDC:
+        fprintf(stderr, "abort: temporal error with store... ... \n");
+        break;
+    case ERROR_OF_TEMPORAL_LRS:
+        fprintf(stderr, "abort: temporal error with load pointer return from stack... ... \n");
+        break;
+    case ERROR_OF_TEMPORAL_SRS:
+        fprintf(stderr, "abort: temporal error with store pointer return from stack... ... \n");
         break;
     case ERROR_VIRTUAL_ADDR:
         fprintf(stderr, "abort: virtual address error... ... \n");
@@ -170,6 +193,15 @@ void _f_callAbort(int type) {
     case ERROR_OF_DEREFERENCE:
         fprintf(stderr, "abort: tasmc dereference errors... ... \n");
         break;
+
+    case ERROR_OF_UNFREE_ABLE:
+        fprintf(stderr, "abort: tasmc can't free this memory.... ... \n");
+        break;
+    case ERROR_OF_FREE:
+        fprintf(stderr, "abort: tasmc free memory errors(maybe: free danning pointer or double free)..... ... \n");
+        break;
+        
+    /*****************************************************/
     case ERROR_POINTER_UNKNOW:
     default:
         fprintf(stderr, "abort: unknow error... ... \n");
@@ -210,8 +242,10 @@ void _f_tasmcPrintf(const char* str, ...)
 
 // pseudo main from TaSMCPass.
 // called by rumtime library main() function
+/*
 extern int _f_pseudoMain(int argc, char **argv);
 
+// todo:main_ --->main
 int main(int argc, char **argv){
 
   #if __WORDSIZE == 32
@@ -224,3 +258,4 @@ int main(int argc, char **argv){
   retValue = _f_pseudoMain(argc, new_argv);
   return retValue;
 }
+*/
