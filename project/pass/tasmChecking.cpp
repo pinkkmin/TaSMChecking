@@ -44,13 +44,16 @@ private:
   StringMap<bool> m_func_def_tasmc;
   StringMap<bool> m_func_wrappers_available;
 
-  size_t allocaFunctionId;
-  StringMap<size_t> m_function_pool;
   std::map<Value *, int> m_is_pointer;
   std::map<Value *, int> m_present_in_original;
+
   // for ty:stack
-  StringMap<Value *>
-      func_id_num_table; //每一个call函数 该函数有一个 id_num ++ -- 初始为0
+  size_t m_funcIdCounter;
+  StringMap<Value *> m_func_id_pool; // every function has a funcId
+  std::map<Value *, Value *> m_func_key_pool;
+  std::map<Value *, Value *> m_pointer_type;
+  std::map<Value *, Value *> m_pointer_key;
+
   std::map<Value *, Value *> m_pointer_base;
   std::map<Value *, Value *> m_pointer_bound;
 
@@ -95,8 +98,10 @@ private:
 
   // others function
   Function *m_f_allocateFunctionKey;
-  Function *m_f_freeFunctionKey;
+  Function *m_f_deallocaFunctionKey;
   Function *m_f_initFunctionKeyPool;
+  Function *m_f_getFunctionKey;
+  Function *m_f_checkPtrKeyWithFuncKey;
 
   // debug function
   Function *m_f_debugPrinfInfo;
@@ -144,7 +149,6 @@ public:
 
   // insert check function
   void insertLoadStoreChecks(Instruction *);
-  void insertTemporalChecks(Instruction *, std::map<Value *, int> &);
 
   /* handler llvm ir functions */
   void handleAlloca(AllocaInst *, BasicBlock *, BasicBlock::iterator &); // yes
@@ -170,9 +174,6 @@ public:
   void dissociateBaseBound(Value *);                  // yes
   Value *getAssociatedBase(Value *);                  // yes
   Value *getAssociatedBound(Value *);                 // yes
-  void associateFunctionKey(Value *, Value *, Value *);
-  void dissociateFuncitonKey(Value *);
-  Value *getAssociatedFuncitonKey(Value *);
 
   /** for global */
   void addBaseBoundGlobals(Module &); // yes
@@ -205,6 +206,20 @@ public:
   void addTasmcRtFunctionToMap();                  // yes
   Instruction *getNextInstruction(Instruction *);  // yes
   bool checkBaseBoundPresent(Value *); // yes: pointer is present in maps.
+
+  //// temporal
+  Value *isAllocateFuncId(Module &, const std::string &);
+  void associateTypeKey(Value *, Value *, Value *);
+  void dissociateTypeKey(Value *);
+  Value *getAssociatedKey(Value *);
+  Value *getAssociatedType(Value *);
+
+  void insertFuncKeyAlloca(CallInst *); // allocate function key
+  void insertFuncKeyDealloca(CallInst *, Instruction *);
+  void insertCallSiteFree(CallInst *);      // transform free() ---> _f_free()
+  void insertTemporalChecks(Instruction *); // check temporal...
+
+  Value *taggedPointer(Instruction *, Value *);
 
   // debug calls
   void insertCallSiteDebugFunc(Instruction *insert_at) {
@@ -268,6 +283,8 @@ void tasmChecking::initTypeName(Module &module) {
 
   m_infinite_bound_ptr =
       ConstantExpr::getIntToPtr(infinite_bound, m_void_ptr_type);
+
+  m_funcIdCounter = 1;
 }
 
 /***
@@ -370,10 +387,12 @@ void tasmChecking::constructPointerHandlers(Module &module) {
   module.getOrInsertFunction("_f_maskingPointer", VoidPtrTy, VoidPtrTy);
 
   // void _f_incPointerAddr(void* addr_of_ptr, size_t index , size_t ptr_size)
-  module.getOrInsertFunction("_f_incPointerAddr", VoidPtrTy, SizeTy, SizeTy);
+  module.getOrInsertFunction("_f_incPointerAddr", VoidTy, VoidPtrTy, SizeTy,
+                             SizeTy);
 
   // void _f_decPointerAddr(void* addr_of_ptr, size_t index, size_t ptr_size)
-  module.getOrInsertFunction("_f_decPointerAddr", VoidPtrTy, SizeTy, SizeTy);
+  module.getOrInsertFunction("_f_decPointerAddr", VoidTy, VoidPtrTy, SizeTy,
+                             SizeTy);
 
   // void* _f_cmpPointerAddr(void* ptrLhs, void* ptrRhs, int op)
   module.getOrInsertFunction("_f_cmpPointerAddr", VoidPtrTy, VoidPtrTy,
@@ -385,11 +404,18 @@ void tasmChecking::constructPointerHandlers(Module &module) {
   // size_t _f_allocateFunctionKey(size_t functionId)
   module.getOrInsertFunction("_f_allocateFunctionKey", SizeTy, SizeTy);
 
-  // void _f_freeFunctionKey(size_t functionId)
-  module.getOrInsertFunction("_f_freeFunctionKey", VoidTy, SizeTy);
+  // void _f_deallocaFunctionKey(size_t functionId)
+  module.getOrInsertFunction("_f_deallocaFunctionKey", VoidTy, SizeTy);
 
   // void _f_initFunctionKeyPool(size_t functionNums)
   module.getOrInsertFunction("_f_initFunctionKeyPool", VoidTy, SizeTy);
+
+  // size_t _f_getFunctionKey(size_t functionId)
+  module.getOrInsertFunction("_f_getFunctionKey", SizeTy, SizeTy);
+
+  // size_t _f_checkPtrKeyWithFuncKey(void* ptr, size_t function_id)
+  module.getOrInsertFunction("_f_checkPtrKeyWithFuncKey", SizeTy, VoidPtrTy,
+                             SizeTy);
 }
 
 //
@@ -577,11 +603,17 @@ void tasmChecking::getPointerFunctions(Module &module) {
   m_f_allocateFunctionKey = module.getFunction("_f_allocateFunctionKey");
   assert(m_f_allocateFunctionKey && "m_f_allocateFunctionKey is NULL ? ");
 
-  m_f_freeFunctionKey = module.getFunction("_f_freeFunctionKey");
-  assert(m_f_freeFunctionKey && "m_f_freeFunctionKey is NULL ? ");
+  m_f_deallocaFunctionKey = module.getFunction("_f_deallocaFunctionKey");
+  assert(m_f_deallocaFunctionKey && "m_f_deallocaFunctionKey is NULL ? ");
 
   m_f_initFunctionKeyPool = module.getFunction("_f_initFunctionKeyPool");
   assert(m_f_initFunctionKeyPool && "m_f_initFunctionKeyPool is NULL ? ");
+
+  m_f_getFunctionKey = module.getFunction("_f_getFunctionKey");
+  assert(m_f_getFunctionKey && "_f_getFunctionKey is NULL ? ");
+
+  m_f_checkPtrKeyWithFuncKey = module.getFunction("_f_checkPtrKeyWithFuncKey");
+  assert(m_f_checkPtrKeyWithFuncKey && "_f_checkPtrKeyWithFuncKey is NULL ? ");
 }
 
 void tasmChecking::getOthersFunctions(Module &module) {
@@ -1410,7 +1442,7 @@ void tasmChecking::addBaseBoundGlobals(Module &module) {
       // errs() << "***************************************** \n";
       Value *operand_base = NULL;
       Value *operand_bound = NULL;
-      Value *initializer = gv-> getInitializer();
+      Value *initializer = gv->getInitializer();
       Constant *given_constant = dyn_cast<Constant>(initializer);
       getConstantExprBaseBound(given_constant, operand_base, operand_bound);
       Instruction *init_gv_inst = getGlobalInitInstruction(module);
@@ -1696,9 +1728,10 @@ void tasmChecking::addWrapperFunctionToMap() {
 void tasmChecking::addTasmcRtFunctionToMap() {
 
   // functions form tasmc_rt.a
-  m_func_def_tasmc["_f_addPtrToFreeTable"] = true;
-  m_func_def_tasmc["_f_allocateFunctionKey"] = true;
-  m_func_def_tasmc["_f_allocatePtrKey"] = true;
+  m_func_def_tasmc["_initTaSMC"] = true;
+  m_func_def_tasmc["_initTaSMC_ret"] = true;
+  m_func_def_tasmc["_f_trie_allocate"] = true;
+  m_func_def_tasmc["_tasmc_global_init"] = true;
   m_func_def_tasmc["_f_allocateSecondaryTrieRange"] = true;
   m_func_def_tasmc["_f_allocateShadowStackMetadata"] = true;
   m_func_def_tasmc["_f_callAbort"] = true;
@@ -1707,48 +1740,54 @@ void tasmChecking::addTasmcRtFunctionToMap() {
   m_func_def_tasmc["_f_checkTemporalLoadPtr"] = true;
   m_func_def_tasmc["_f_checkTemporalStorePtr"] = true;
   m_func_def_tasmc["_f_checkDereferencePtr"] = true;
-  m_func_def_tasmc["_f_cmpPointerAddr"] = true;
+
   m_func_def_tasmc["_f_copyMetaData"] = true;
-  m_func_def_tasmc["_f_deallocatePointer"] = true;
   m_func_def_tasmc["_f_deallocateShadowStackMetaData"] = true;
-  m_func_def_tasmc["_f_decPointerAddr"] = true;
-  m_func_def_tasmc["_f_free"] = true;
-  m_func_def_tasmc["_f_freeFunctionKey"] = true;
-  m_func_def_tasmc["_f_getPointerKey"] = true;
-  m_func_def_tasmc["_f_getPointerType"] = true;
-  m_func_def_tasmc["_f_getPtrFreeFlagFromFAT"] = true;
-  m_func_def_tasmc["_f_incPointerAddr"] = true;
-  m_func_def_tasmc["_f_initFunctionKeyPool"] = true;
-  m_func_def_tasmc["_f_isFreeAbleOfPointer"] = true;
+
   m_func_def_tasmc["_f_loadBaseOfMetaData"] = true;
   m_func_def_tasmc["_f_loadBaseOfShadowStack"] = true;
   m_func_def_tasmc["_f_loadBoundOfMetadata"] = true;
   m_func_def_tasmc["_f_loadBoundOfShadowStack"] = true;
-  m_func_def_tasmc["_f_malloc"] = true;
-  m_func_def_tasmc["_f_maskingPointer"] = true;
-  m_func_def_tasmc["_f_printfPointerDebug"] = true;
-  m_func_def_tasmc["_f_printfPtrBaseBound"] = true;
-
-  // m_func_def_tasmc["_f_pseudoMain"] = true;
-
-  m_func_def_tasmc["_f_removePtrFromFreeTable"] = true;
-  m_func_def_tasmc["_f_safe_mmap"] = true;
-  m_func_def_tasmc["_f_setPointerKey"] = true;
-  m_func_def_tasmc["_f_setPointerType"] = true;
-  m_func_def_tasmc["_f_setPtrFreeFlagToFAT"] = true;
   m_func_def_tasmc["_f_storeBaseOfShadowStack"] = true;
   m_func_def_tasmc["_f_storeBoundOfShadowStack"] = true;
   m_func_def_tasmc["_f_storeMetaData"] = true;
+  m_func_def_tasmc["_f_malloc"] = true;
+  m_func_def_tasmc["_f_free"] = true;
+  m_func_def_tasmc["_f_safe_mmap"] = true;
+
   m_func_def_tasmc["_f_tasmcPrintf"] = true;
-  m_func_def_tasmc["_f_trie_allocate"] = true;
-  m_func_def_tasmc["_f_typeCasePointer"] = true;
-
-  m_func_def_tasmc["_initTaSMC"] = true;
-  m_func_def_tasmc["_initTaSMC_ret"] = true;
   m_func_def_tasmc["_f_printfPtrBaseBound"] = true;
-  m_func_def_tasmc["_tasmc_global_init"] = true;
-  // end from
+  m_func_def_tasmc["_f_printfPointerDebug"] = true;
 
+  // m_func_def_tasmc["_f_pseudoMain"] = true;
+  m_func_def_tasmc["_f_maskingPointer"] = true;
+  m_func_def_tasmc["_f_incPointerAddr"] = true;
+  m_func_def_tasmc["_f_decPointerAddr"] = true;
+  m_func_def_tasmc["_f_cmpPointerAddr"] = true;
+  m_func_def_tasmc["_f_typeCasePointer"] = true;
+  m_func_def_tasmc["_f_allocatePtrKey"] = true; // for free able
+  m_func_def_tasmc["_f_deallocatePointer"] = true;
+
+  m_func_def_tasmc["_f_getPointerKey"] = true;
+  m_func_def_tasmc["_f_getPointerType"] = true;
+  m_func_def_tasmc["_f_setPointerKey"] = true;
+  m_func_def_tasmc["_f_setPointerType"] = true;
+
+  /*  about free able map */
+  m_func_def_tasmc["_f_isFreeAbleOfPointer"] = true;
+  m_func_def_tasmc["_f_addPtrToFreeTable"] = true;
+  m_func_def_tasmc["_f_removePtrFromFreeTable"] = true;
+  m_func_def_tasmc["_f_getPtrFreeFlagFromFAT"] = true;
+  m_func_def_tasmc["_f_setPtrFreeFlagToFAT"] = true;
+
+  /*  about functionKey pool */
+  m_func_def_tasmc["_f_initFunctionKeyPool"] = true;
+  m_func_def_tasmc["_f_allocateFunctionKey"] = true;
+  m_func_def_tasmc["_f_deallocaFunctionKey"] = true;
+  m_func_def_tasmc["_f_getFunctionKey"] = true;
+  m_func_def_tasmc["_f_checkPtrKeyWithFuncKey"] = true;
+
+  // end from
   m_func_def_tasmc["puts"] = true; // maybe delete
 
   m_func_def_tasmc["__assert_fail"] = true;
@@ -2403,10 +2442,6 @@ Value *tasmChecking::getAssociatedBound(Value *ptr) {
   return pointer_bound;
 }
 
-void tasmChecking::associateFunctionKey(Value *key, Value *key1, Value *key2) {}
-void tasmChecking::dissociateFuncitonKey(Value *key) {}
-Value *tasmChecking::getAssociatedFuncitonKey(Value *key) { return key; }
-
 /** Description:
  * called function: m_f_storeMetaData
  *  _f_storeMetaData(void* addr_of_ptr, void* base, void* bound)
@@ -2710,6 +2745,75 @@ Value *tasmChecking::castToVoidPtr(Value *operand, Instruction *insert_at) {
         new BitCastInst(operand, m_void_ptr_type, "bitcast", insert_at);
   }
   return cast_bitcast;
+}
+
+/****************************************************************************************************************************************/
+/// temporal check function...
+
+/** is allocate functionId ?
+ *  yes --->return true
+ * no allocate a functionId.
+ */
+Value *tasmChecking::isAllocateFuncId(Module &module, const std::string &str) {
+
+  if (m_func_id_pool.find(str) == m_func_id_pool.end()) {
+    Value *funcId;
+    funcId = ConstantInt::get(Type::getInt32Ty(module.getContext()),
+                              m_funcIdCounter, false);
+    m_func_id_pool[str] = funcId;
+    m_funcIdCounter++;
+
+    return funcId;
+  }
+
+  return m_func_id_pool[str];
+}
+
+void tasmChecking::associateTypeKey(Value *ptr, Value *type, Value *key) {
+
+  if (m_pointer_key.count(ptr)) {
+    dissociateTypeKey(ptr);
+  }
+  m_pointer_key[ptr] = key;
+  if (m_pointer_type.count(ptr)) {
+    assert(0 && "bound map already has an entry in the map");
+  }
+  m_pointer_type[ptr] = type;
+}
+void tasmChecking::dissociateTypeKey(Value *ptr) {
+
+  if (m_pointer_key.count(ptr)) {
+    m_pointer_key.erase(ptr);
+  }
+  if (m_pointer_type.count(ptr)) {
+    m_pointer_type.erase(ptr);
+  }
+  assert((m_pointer_type.count(ptr) == 0) && "dissociating base failed\n");
+  assert((m_pointer_key.count(ptr) == 0) && "dissociating bound failed");
+}
+Value *tasmChecking::getAssociatedKey(Value *ptr) {
+
+  Value *key;
+
+  return key;
+}
+Value *tasmChecking::getAssociatedType(Value *ptr) {
+
+  Value *type;
+
+
+  return type;
+}
+
+void tasmChecking::insertFuncKeyAlloca(CallInst *call_Inst) {}
+void tasmChecking::insertFuncKeyDealloca(CallInst *call_Inst,
+                                         Instruction *Inst) {}
+void tasmChecking::insertCallSiteFree(CallInst *call_Inst) {}
+void tasmChecking::insertTemporalChecks(Instruction *ptr) {}
+Value *tasmChecking::taggedPointer(Instruction *Inst, Value *ptr) {
+  Value *taggedPointer;
+
+  return taggedPointer;
 }
 /****************************************************************************************************************************************/
 bool tasmChecking::runOnModule(Module &module) {

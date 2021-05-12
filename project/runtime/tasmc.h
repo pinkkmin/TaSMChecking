@@ -323,7 +323,7 @@ size_t _f_allocateFunctionKey(size_t functionId) {
      return key;
 }
 
-void _f_freeFunctionKey(size_t functionId) {
+void _f_deallocaFunctionKey(size_t functionId) {
     size_t functionKey =  *(_function_key_pool + functionId);
     if(functionKey <= 0) _f_callAbort(ERROR_FUNCTION_CALLING);
 
