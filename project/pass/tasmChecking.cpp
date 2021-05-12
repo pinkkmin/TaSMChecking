@@ -1171,7 +1171,7 @@ void tasmChecking::getConstantExprBaseBound(Constant *given_constant,
     }
     } // Switch ends
   } else {
-    errs() << "gv: " << *given_constant << "\n";
+    // errs() << "gv: " << *given_constant << "\n";
     // Value *cexpr_ = given_constant->getOperand(0);
 
     // if (isa<ConstantExpr>(cexpr_)) {

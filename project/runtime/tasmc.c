@@ -242,7 +242,6 @@ void _f_tasmcPrintf(const char* str, ...)
 
 // pseudo main from TaSMCPass.
 // called by rumtime library main() function
-/*
 extern int _f_pseudoMain(int argc, char **argv);
 
 // todo:main_ --->main
@@ -258,4 +257,3 @@ int main(int argc, char **argv){
   retValue = _f_pseudoMain(argc, new_argv);
   return retValue;
 }
-*/

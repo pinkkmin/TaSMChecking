@@ -17,5 +17,9 @@ add_library(tasmc SHARED
 set_target_properties(tasmc PROPERTIES
    COMPILE_FLAGS "-fno-rtti"
    )
-
+   if(APPLE)
+   set_target_properties(PrintFunctions PROPERTIES
+     LINK_FLAGS "-undefined dynamic_lookup"
+   )
+ endif(APPLE)
 SET(LIBRARY_OUTPUT_PATH ../../)
