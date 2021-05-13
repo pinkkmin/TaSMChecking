@@ -93,6 +93,7 @@ void _initTaSMC(){
     
   
    *(_function_key_pool) = 0; 
+   _f_initFunctionKeyPool(8192);
 }
 
 _tasmc_trie_entry* _f_trie_allocate(){

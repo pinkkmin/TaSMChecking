@@ -51,8 +51,17 @@ private:
   size_t m_funcIdCounter;
   StringMap<Value *> m_func_id_pool; // every function has a funcId
   std::map<Value *, Value *> m_func_key_pool;
+  Value *m_invalid_functionKey; // 0
   std::map<Value *, Value *> m_pointer_type;
   std::map<Value *, Value *> m_pointer_key;
+
+  Value *m_type_heap;   // 001
+  Value *m_type_stack;  // 010
+  Value *m_type_global; // 011
+  Value *m_type_other;  // 000 null
+
+  Value *m_global_key;  // 8190
+  Value *m_invalid_key; // 8191
 
   std::map<Value *, Value *> m_pointer_base;
   std::map<Value *, Value *> m_pointer_bound;
@@ -213,12 +222,17 @@ public:
   void dissociateTypeKey(Value *);
   Value *getAssociatedKey(Value *);
   Value *getAssociatedType(Value *);
+  void getConstantExprTypeKey(Constant *, Value *&, Value *&);
 
-  void insertFuncKeyAlloca(CallInst *); // allocate function key
-  void insertFuncKeyDealloca(CallInst *, Instruction *);
+  void
+  insertPointerKeyAlloca(Instruction *); // allocate pointer key for free map
+  Value *insertFuncKeyAlloca(Value *, Instruction *); // allocate function key
+  void insertFuncKeyDealloca(Value *, Instruction *);
   void insertCallSiteFree(CallInst *);      // transform free() ---> _f_free()
   void insertTemporalChecks(Instruction *); // check temporal...
 
+  void insertCallSiteSetPtrType(Value *, Instruction *);
+  void insertCallSiteSetPtrKey(Value *, Instruction *);
   Value *taggedPointer(Instruction *, Value *);
 
   // debug calls
@@ -285,6 +299,29 @@ void tasmChecking::initTypeName(Module &module) {
       ConstantExpr::getIntToPtr(infinite_bound, m_void_ptr_type);
 
   m_funcIdCounter = 1;
+  m_invalid_functionKey =
+      ConstantInt::get(Type::getInt32Ty(module.getContext()), 0, false);
+
+  size_t type_heap = (size_t)1;
+  size_t type_stack = (size_t)2;
+  size_t type_global = (size_t)3;
+  size_t type_other = (size_t)0;
+
+  m_type_heap =
+      ConstantInt::get(Type::getInt32Ty(module.getContext()), type_heap, false);
+  m_type_stack = ConstantInt::get(Type::getInt32Ty(module.getContext()),
+                                  type_stack, false);
+  m_type_global = ConstantInt::get(Type::getInt32Ty(module.getContext()),
+                                   type_global, false);
+  m_type_other = ConstantInt::get(Type::getInt32Ty(module.getContext()),
+                                  type_other, false);
+
+  size_t invalid_key = (size_t)8191;
+  size_t global_key = (size_t)8090;
+  m_invalid_key = ConstantInt::get(Type::getInt32Ty(module.getContext()),
+                                   invalid_key, false);
+  m_global_key = ConstantInt::get(Type::getInt32Ty(module.getContext()),
+                                  global_key, false);
 }
 
 /***
@@ -1172,6 +1209,7 @@ void tasmChecking::getConstantExprBaseBound(Constant *given_constant,
   if (isa<ConstantPointerNull>(given_constant)) {
     tmp_base = m_void_null_ptr;
     tmp_bound = m_void_null_ptr;
+    // errs()<<"Yes is null;\n";
     return;
   }
   ConstantExpr *cexpr = dyn_cast<ConstantExpr>(given_constant);
@@ -1319,6 +1357,10 @@ void tasmChecking::handleGlobalArrayTypeInitializer(Module &module,
           Constant *child_gv =
               dyn_cast<Constant>(struct_constant->getOperand(struct_index));
           getConstantExprBaseBound(child_gv, operand_base, operand_bound);
+
+          Instruction *init_gv_inst = getGlobalInitInstruction(module);
+          insertStoreBaseBoundFunc(child_gv, operand_base, operand_bound,
+                                   init_gv_inst);
         }
         // else we don't care.
 
@@ -1338,6 +1380,10 @@ void tasmChecking::handleGlobalArrayTypeInitializer(Module &module,
       Value *operand_base = NULL;
       Value *operand_bound = NULL;
       getConstantExprBaseBound(pointer_constant, operand_base, operand_bound);
+
+      Instruction *init_gv_inst = getGlobalInitInstruction(module);
+      insertStoreBaseBoundFunc(pointer_constant, operand_base, operand_bound,
+                               init_gv_inst);
     }
   }
 
@@ -1390,6 +1436,9 @@ void tasmChecking::handleGlobalStructTypeInitializer(
       Value *operand_bound = NULL;
       Constant *child_gv = dyn_cast<Constant>(constant->getOperand(index));
       getConstantExprBaseBound(child_gv, operand_base, operand_bound);
+
+      Instruction *init_gv_inst = getGlobalInitInstruction(module);
+      insertStoreBaseBoundFunc(gv, operand_base, operand_bound, init_gv_inst);
     }
   }
 }
@@ -1438,8 +1487,8 @@ void tasmChecking::addBaseBoundGlobals(Module &module) {
     // handler poninterType : if & must be initing by
     // getelementptr/bitcast...to.../inttoptr
     if (isa<PointerType>(initializer->getType())) {
-      // errs() << " is PointerType \n";
-      // errs() << "***************************************** \n";
+      errs() << " is PointerType \n";
+      errs() << "***************************************** \n";
       Value *operand_base = NULL;
       Value *operand_bound = NULL;
       Value *initializer = gv->getInitializer();
@@ -2801,15 +2850,125 @@ Value *tasmChecking::getAssociatedType(Value *ptr) {
 
   Value *type;
 
-
   return type;
 }
 
-void tasmChecking::insertFuncKeyAlloca(CallInst *call_Inst) {}
-void tasmChecking::insertFuncKeyDealloca(CallInst *call_Inst,
-                                         Instruction *Inst) {}
+/**
+ * method: getConstantExprTypeKey
+ * description: tagged global constant pointer type&key.
+ *
+ */
+void tasmChecking::getConstantExprTypeKey(Constant *given_constant,
+                                          Value *&tmp_type, Value *&tmp_key) {
+
+  if (isa<ConstantPointerNull>(given_constant)) {
+
+    tmp_type = m_type_other; // get type: others.
+    tmp_key = m_invalid_key; // get key: invalid_key.
+    return;
+  }
+  ConstantExpr *cexpr = dyn_cast<ConstantExpr>(given_constant);
+
+  tmp_type = NULL;
+  tmp_key = NULL;
+
+  if (cexpr) {
+    assert(cexpr && "ConstantExpr and Value* is null??");
+    switch (cexpr->getOpcode()) {
+
+    case Instruction::GetElementPtr: {
+      Constant *internal_constant = dyn_cast<Constant>(cexpr->getOperand(0));
+      getConstantExprTypeKey(internal_constant, tmp_type, tmp_key);
+      break;
+    }
+
+    case BitCastInst::BitCast: {
+      Constant *internal_constant = dyn_cast<Constant>(cexpr->getOperand(0));
+      getConstantExprTypeKey(internal_constant, tmp_type, tmp_key);
+      break;
+    }
+    case Instruction::IntToPtr: {
+      tmp_type = m_type_other;
+      tmp_key = m_invalid_key;
+      return;
+      break;
+    }
+    default: {
+      break;
+    }
+    }
+  } else {
+    const PointerType *func_ptr_type =
+        dyn_cast<PointerType>(given_constant->getType());
+
+    if (isa<FunctionType>(func_ptr_type->getElementType())) {
+      tmp_type = m_type_global; // get type: others.
+      tmp_key = m_global_key;   // get key: invalid_key.
+      return;
+    }
+
+    GlobalVariable *gv = dyn_cast<GlobalVariable>(given_constant);
+
+    if (gv && !gv->hasInitializer()) {
+      tmp_type = m_type_global;
+      tmp_key = m_global_key;
+      return;
+    }
+
+    tmp_type = m_type_global; // get type: others.
+    tmp_key = m_global_key;   // get key: invalid_key.
+  }
+}
+
+//
+/**
+ *
+ * size_t _f_allocateFunctionKey(size_t functionId)
+ *
+ */
+Value *tasmChecking::insertFuncKeyAlloca(Value *funcId,
+                                         Instruction *insert_at) {
+
+  SmallVector<Value *, 8> args;
+
+  args.push_back(funcId);
+
+  Value *functionKey =
+      CallInst::Create(m_f_allocateFunctionKey, args, "", insert_at);
+  m_func_key_pool[funcId] = functionKey;
+
+  return functionKey;
+}
+
+void tasmChecking::insertFuncKeyDealloca(Value *funcId,
+                                         Instruction *insert_at) {
+
+  SmallVector<Value *, 8> args;
+
+  args.push_back(funcId);
+
+  Value *functionKey =
+      CallInst::Create(m_f_deallocaFunctionKey, args, "", insert_at);
+  m_func_key_pool[funcId] = m_invalid_functionKey;
+}
+
 void tasmChecking::insertCallSiteFree(CallInst *call_Inst) {}
+
 void tasmChecking::insertTemporalChecks(Instruction *ptr) {}
+
+/**
+ * 
+ * 
+ * 
+ */ 
+void tasmChecking::insertCallSiteSetPtrType(Value *ptr, Instruction *insert_at) {
+
+
+}
+void tasmChecking::insertCallSiteSetPtrKey(Value *ptr, Instruction *insert_at) {
+
+}
+
 Value *tasmChecking::taggedPointer(Instruction *Inst, Value *ptr) {
   Value *taggedPointer;
 

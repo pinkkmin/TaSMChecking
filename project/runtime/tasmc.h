@@ -315,7 +315,7 @@ void* _f_typeCasePointer(void* ptr) {
 /*********************************************************************************************************/
 // function key for temporal in stack.
 
-size_t _f_allocateFunctionKey(size_t functionId) {
+    size_t _f_allocateFunctionKey(size_t functionId) {
      *(_function_key_pool + functionId) = functionKey++;
      if(functionKey == 8192) functionKey = 1;
 
@@ -331,6 +331,7 @@ void _f_deallocaFunctionKey(size_t functionId) {
 }
 
 void _f_initFunctionKeyPool(size_t functionNums){
+    
     assert((_function_key_pool != (void*) -1) && "functionKey pool is NULL, dosen't init... ... ?");
     if(functionNums >= _FUNCTIONKEY_POOL_N_ITEMS) {
         _f_callAbort(ERROR_FUNCTION_POOL_OVERFLOW);         // call abort;
@@ -339,7 +340,6 @@ void _f_initFunctionKeyPool(size_t functionNums){
     for(size_t id = 0; id < functionNums; id++) {
         *(_function_key_pool + id) = 0;
     }
-
 }
 
 size_t _f_getFunctionKey(size_t functionId) {
@@ -512,10 +512,10 @@ size_t _f_allocatePtrKey(){
     size_t ans = -1;
     if(isUse != 1) {
       ans = ptrKeyCounter++;
-      if(ptrKeyCounter >= _FREE_ABLE_TABLE_N_KEY)
-      ptrKeyCounter %= 1;
+      if(ptrKeyCounter >= _FREE_ABLE_TABLE_N_KEY-6) // 1-- 8185   8190: global_key    8191:invalid_ptr
+      ptrKeyCounter = 1;
     }else {
-        for( size_t index = 0; index < _FREE_ABLE_TABLE_N_KEY; ++index) {
+        for( size_t index = 0; index < _FREE_ABLE_TABLE_N_KEY-1; ++index) {
             if(*(_free_able_table + index) != 1) {
                 ptrKeyCounter = index+1;
                 return index;
