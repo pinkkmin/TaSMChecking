@@ -99,6 +99,7 @@ private:
   // operating pointer function
   Function *m_f_getPointerType;
   Function *m_f_setPointerType;
+  Function *m_f_setPointerKey;
   Function *m_f_maskingPointer;
   Function *m_f_incPointerAddr;
   Function *m_f_decPointerAddr;
@@ -227,12 +228,12 @@ public:
   void
   insertPointerKeyAlloca(Instruction *); // allocate pointer key for free map
   Value *insertFuncKeyAlloca(Value *, Instruction *); // allocate function key
-  void insertFuncKeyDealloca(Value *, Instruction *);
+  void insertFuncKeyDealloca(Function *, Value *);
   void insertCallSiteFree(CallInst *);      // transform free() ---> _f_free()
   void insertTemporalChecks(Instruction *); // check temporal...
 
-  void insertCallSiteSetPtrType(Value *, Instruction *);
-  void insertCallSiteSetPtrKey(Value *, Instruction *);
+  void insertCallSiteSetPtrType(Value *, Value *, Instruction *);
+  void insertCallSiteSetPtrKey(Value *, Value *, Instruction *);
   Value *taggedPointer(Instruction *, Value *);
 
   // debug calls
@@ -419,6 +420,12 @@ void tasmChecking::constructPointerHandlers(Module &module) {
 
   // void _f_setPointerType(void* addr_of_ptr, size_t type)
   module.getOrInsertFunction("_f_setPointerType", VoidTy, VoidPtrTy, SizeTy);
+
+  // size_t _f_getPointerKey(void* ptr)
+  module.getOrInsertFunction("_f_getPointerKey", SizeTy, VoidPtrTy);
+
+  // void _f_setPointerKey(void* addr_of_ptr, size_t key)
+  module.getOrInsertFunction("_f_setPointerKey", VoidTy, VoidPtrTy, SizeTy);
 
   // void* _f_maskingPointer(void* ptr)
   module.getOrInsertFunction("_f_maskingPointer", VoidPtrTy, VoidPtrTy);
@@ -622,6 +629,9 @@ void tasmChecking::getPointerFunctions(Module &module) {
   m_f_setPointerType = module.getFunction("_f_setPointerType");
   assert(m_f_setPointerType && "m_f_setPointerType is NULL ? ");
 
+  m_f_setPointerKey = module.getFunction("_f_setPointerKey");
+  assert(m_f_setPointerKey && "m_f_setPointerKey is NULL ? ");
+
   m_f_maskingPointer = module.getFunction("_f_maskingPointer");
   assert(m_f_maskingPointer && "m_f_maskingPointer is NULL ? ");
 
@@ -774,7 +784,12 @@ void tasmChecking::scanfFirstPass(Function *func) {
     }
   } // load pointer arguments end
 
-  // todo: get function-key in here
+  // allocate a function key for function
+  const std::string funcName(func->getName());
+  Value *funcId = m_func_id_pool[funcName];
+  Instruction *insert_at = &*(func->begin()->begin());
+
+  insertFuncKeyAlloca(funcId, insert_at);
 
   /* Algorithm for propagating the base and bound.Each
    * basic block is visited only once.starting by visiting the
@@ -782,6 +797,7 @@ void tasmChecking::scanfFirstPass(Function *func) {
    * current basic block on to the queue if it has not been visited.
    * ref from:softbound/cets
    */
+
   std::set<BasicBlock *> bb_visited;
   std::queue<BasicBlock *> bb_worklist;
   Function::iterator bb_begin = func->begin();
@@ -908,6 +924,7 @@ void tasmChecking::scanfFirstPass(Function *func) {
   }   // Function iterator Ends
 
   // todo: freeFunction-key
+  insertFuncKeyDealloca(func, funcId);
 }
 
 void tasmChecking::scanfSecondPass(Function *func) {
@@ -2940,16 +2957,30 @@ Value *tasmChecking::insertFuncKeyAlloca(Value *funcId,
   return functionKey;
 }
 
-void tasmChecking::insertFuncKeyDealloca(Value *funcId,
-                                         Instruction *insert_at) {
+void tasmChecking::insertFuncKeyDealloca(Function *func, Value *funcId) {
 
-  SmallVector<Value *, 8> args;
+  Instruction *next_inst = NULL;
 
-  args.push_back(funcId);
+  for (Function::iterator b = func->begin(), be = func->end(); b != be; ++b) {
 
-  Value *functionKey =
-      CallInst::Create(m_f_deallocaFunctionKey, args, "", insert_at);
-  m_func_key_pool[funcId] = m_invalid_functionKey;
+    BasicBlock *bb = dyn_cast<BasicBlock>(b);
+    assert(bb && "basic block does not exist?");
+
+    for (BasicBlock::iterator i = bb->begin(), ie = bb->end(); i != ie; ++i) {
+
+      next_inst = dyn_cast<Instruction>(i);
+
+      if (!isa<ReturnInst>(next_inst))
+        continue;
+
+      ReturnInst *ret = dyn_cast<ReturnInst>(next_inst);
+      SmallVector<Value *, 8> args;
+      args.push_back(funcId);
+      Value *functionKey =
+          CallInst::Create(m_f_deallocaFunctionKey, args, "", ret);
+      m_func_key_pool[funcId] = m_invalid_functionKey;
+    }
+  }
 }
 
 void tasmChecking::insertCallSiteFree(CallInst *call_Inst) {}
@@ -2957,16 +2988,26 @@ void tasmChecking::insertCallSiteFree(CallInst *call_Inst) {}
 void tasmChecking::insertTemporalChecks(Instruction *ptr) {}
 
 /**
- * 
- * 
- * 
- */ 
-void tasmChecking::insertCallSiteSetPtrType(Value *ptr, Instruction *insert_at) {
+ * Method: insertCallSiteSetPtrType
+ * description: set pointer key
+ * void _f_setPointerType(void* addr_of_ptr, size_t type)
+ *
+ */
+void tasmChecking::insertCallSiteSetPtrType(Value *ptr, Value *type,
+                                            Instruction *insert_at) {
 
-
+  SmallVector<Value *, 8> args;
+  args.push_back(ptr);
+  args.push_back(type);
+  CallInst::Create(m_f_setPointerType, args, "", insert_at);
 }
-void tasmChecking::insertCallSiteSetPtrKey(Value *ptr, Instruction *insert_at) {
 
+// void _f_setPointerKey(void* addr_of_ptr, size_t key)
+void tasmChecking::insertCallSiteSetPtrKey(Value *ptr, Value *key,
+                                           Instruction *insert_at) {
+  SmallVector<Value *, 8> args;
+  args.push_back(key);
+  CallInst::Create(m_f_setPointerKey, args, "", insert_at);
 }
 
 Value *tasmChecking::taggedPointer(Instruction *Inst, Value *ptr) {
@@ -2997,8 +3038,11 @@ bool tasmChecking::runOnModule(Module &module) {
       // errs()<<"no check \n";
       continue;
     }
-    // errs()<<" : yes check...\n";
-    errs() << func_ptr->getName() << "\n";
+
+    const std::string funcName(func_ptr->getName());
+    errs() << funcName << "\n";
+
+    isAllocateFuncId(module, funcName); // allocate a functionId
     /** else do three pass
      *  pass1 : gather info
      *  write back some info that needed.
