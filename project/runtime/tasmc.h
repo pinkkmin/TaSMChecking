@@ -86,7 +86,7 @@ static const size_t _TRIE_PRIMARY_TABLE_N_ENTRIES = ((size_t) 8 * (size_t) 1024 
 //trie second level: 2^22
 static const size_t _TRIE_SECONDARY_TABLE_N_ENTRIES = ((size_t) 4 * (size_t) 1024 * (size_t) 1024);  
 
-static const size_t _BITS_OF_SIZET = sizeof(size_t)*8;
+static const size_t _BITS_OF_SIZET = sizeof(size_t) * 8;
 static const size_t _ALIGN_BYTE_LOWER_BITS = 3; //低位3位字节对齐
 
 // functionKey Pool
@@ -218,6 +218,16 @@ void _f_setPointerKey(void* addr_of_ptr, size_t key) {
     *((void**)real_add_of_ptr) = (void*)value;
 }
 
+void* _f_setPointerTypeKey(void* ptr, size_t type, size_t key){
+
+    size_t value = *((size_t*)ptr) & _BITS_62_TO_61_NEG;
+    type = type <<(_BITS_OF_SIZET-3);
+    value = value | type;
+    value =  value  & _BITS_60_TO_48_NEG;
+    value = value | (key<<(_BITS_OF_SIZET-16));
+    return  (void*)value;
+}
+
 /***
  * when operating pointer,such as ptr++, ptr-- ... 
  * masking ptr with highter 16 bits.
@@ -318,14 +328,14 @@ void* _f_typeCasePointer(void* ptr) {
     size_t _f_allocateFunctionKey(size_t functionId) {
      *(_function_key_pool + functionId) = functionKey++;
      if(functionKey == 8192) functionKey = 1;
-
+        printf("allocate function key \n");
      size_t key = *(_function_key_pool + functionId);
      return key;
 }
 
 void _f_deallocaFunctionKey(size_t functionId) {
     size_t functionKey =  *(_function_key_pool + functionId);
-    if(functionKey <= 0) _f_callAbort(ERROR_FUNCTION_CALLING);
+    if(functionKey < 0) _f_callAbort(ERROR_FUNCTION_CALLING);
     printf("deallocate function key \n");
     *(_function_key_pool + functionId) -= 0;
 }
@@ -346,7 +356,7 @@ size_t _f_getFunctionKey(size_t functionId) {
 
     size_t functionKey =  *(_function_key_pool + functionId);
 
-    if(functionKey <= 0) _f_callAbort(ERROR_FUNCTION_CALLING);
+    if(functionKey < 0) _f_callAbort(ERROR_FUNCTION_CALLING);
     return functionKey;
 }
 
@@ -526,6 +536,7 @@ size_t _f_allocatePtrKey(){
         _f_callAbort(ERROR_FREE_TABLE_USE_UP);
         return  0;
     }
+    _f_addPtrToFreeTable(ans);
     return ans;
 }
 
@@ -644,7 +655,7 @@ void _f_checkTemporalStorePtr(void* ptr, size_t functionId) {
        size_t flag =  _f_isFreeAbleOfPointer(ptr);
 
        if(flag != PTR_FREE_ABLE){ 
-           _f_tasmcPrintf("\n TaSMChecking:: temporal load check, invalid pointer key. key = %zx,ptr =%zx\n", key, ptr);
+           _f_tasmcPrintf("\n TaSMChecking:: temporal store check, invalid pointer key. key = %zx,ptr =%zx\n", key, ptr);
            _f_callAbort(ERROR_OF_TEMPORAL_SDC);
        }  
     }

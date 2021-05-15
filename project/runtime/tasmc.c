@@ -231,8 +231,11 @@ void _f_printfPointerDebug(void* ptr,size_t type) {
     size_t value = (size_t)ptr;
     if(type == 0) {
         printf("[TaSMC Debug] funcId = 0x%d\n", value);
-    }else {
+    }else if(type == 1){
          printf("[TaSMC Debug] funcKey = 0x%d\n", value);
+    }
+    else {
+          printf("[TaSMC Debug] value = 0x%zx\n", value);
     }
    
 }
