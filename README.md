@@ -17,12 +17,12 @@ The Temporal and Spatial Memory Safety Checking For C at Runtime.
 ```
 ## Todo
 
-- [ ] writing runtime library
+- [x] writing runtime library
    - [x] for heap
-   - [ ] for stack
-   - [ ] for global
-- [ ] writing LLVM Pass 
-   - [ ] initPass
+   - [x] for stack
+   - [x] for global
+- [x] writing LLVM Pass 
+   - [x] initPass
    - [ ] ...
 - [ ] Writing note/blog
    - [ ] developing pass out of source
@@ -30,3 +30,5 @@ The Temporal and Spatial Memory Safety Checking For C at Runtime.
 - [ ] design&review
 - [x] testing
 - [x] listen to **Sugar Plum Ferry**. 
+- [ ] check more......
+## REF

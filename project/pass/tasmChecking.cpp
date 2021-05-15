@@ -229,11 +229,11 @@ public:
   insertPointerKeyAlloca(Instruction *); // allocate pointer key for free map
   Value *insertFuncKeyAlloca(Value *, Instruction *); // allocate function key
   void insertFuncKeyDealloca(Function *, Value *);
-  void insertCallSiteFree(CallInst *);      // transform free() ---> _f_free()
   void insertTemporalChecks(Instruction *); // check temporal...
 
   void insertCallSiteSetPtrType(Value *, Value *, Instruction *);
   void insertCallSiteSetPtrKey(Value *, Value *, Instruction *);
+  Value *insertCallSiteMaskPtr(Value *, Instruction *);
   Value *taggedPointer(Instruction *, Value *);
 
   void transformFunction(Module &, Function *);
@@ -1073,13 +1073,17 @@ void tasmChecking::insertDereferenceCheck(Function *func) {
         continue;
 
       if (isa<LoadInst>(new_inst)) {
+
         insertLoadStoreChecks(new_inst);
+        insertTemporalChecks(new_inst);
         // todo : insert temporal
         continue;
       }
 
       if (isa<StoreInst>(new_inst)) {
+
         insertLoadStoreChecks(new_inst);
+        insertTemporalChecks(new_inst);
         // todo : insert temporal
         continue;
       }
@@ -1817,7 +1821,7 @@ void tasmChecking::addTasmcRtFunctionToMap() {
   m_func_def_tasmc["_f_storeBaseOfShadowStack"] = true;
   m_func_def_tasmc["_f_storeBoundOfShadowStack"] = true;
   m_func_def_tasmc["_f_storeMetaData"] = true;
-//  m_func_def_tasmc["_f_malloc"] = true;
+  //  m_func_def_tasmc["_f_malloc"] = true;
   m_func_def_tasmc["_f_free"] = true;
   m_func_def_tasmc["_f_safe_mmap"] = true;
 
@@ -2018,18 +2022,6 @@ void tasmChecking::insertLoadStoreChecks(Instruction *Inst) {
   if (given_constant) {
     getConstantExprBaseBound(given_constant, tmp_base, tmp_bound);
 
-    // errs() << "yes is gv\n";
-    // errs() << "Inst:" << *Inst << "\n";
-    // errs() << "given_constant: " << *given_constant << "\n";
-    //  errs() << "tmp_bound" << *tmp_bound << "\n";
-    // Value *cast_pointer_operand_value = castToVoidPtr(given_constant, Inst);
-    // insertCallSiteDebugPrintPtrfFunc(cast_pointer_operand_value, Inst);
-    // Value *bitcast_base = castToVoidPtr(tmp_base, Inst);
-    // args.push_back(bitcast_base);
-
-    // Value *bitcast_bound = castToVoidPtr(tmp_bound, Inst);
-    // insertCallSiteDebugPrintPtrfFunc(bitcast_base, Inst);
-    // insertCallSiteDebugPrintPtrfFunc(bitcast_bound, Inst);
   } else {
     tmp_base = getAssociatedBase(pointer_operand);
     tmp_bound = getAssociatedBound(pointer_operand);
@@ -2050,8 +2042,18 @@ void tasmChecking::insertLoadStoreChecks(Instruction *Inst) {
   args.push_back(size_of_type);
 
   if (isa<LoadInst>(Inst)) {
+    // LoadInst *ldi = dyn_cast<LoadInst>(Inst);
+    // Value *pointer = ldi->getPointerOperand();
+    // Value *maskedPtr = insertCallSiteMaskPtr(pointer, Inst);
+    // ldi->setOperand(0, maskedPtr);
+     // insertCallSiteSetPtrType(ptr, m_type_heap, insert_at);
+    // insertCallSiteSetPtrKey(ptr, ptrKey, insert_at);
     CallInst::Create(m_f_checkSpatialLoadPtr, args, "", Inst);
   } else {
+    // StoreInst *sti = dyn_cast<StoreInst>(Inst);
+    // Value *pointer = sti->getOperand(1);
+    // Value *maskedPtr = insertCallSiteMaskPtr(pointer, Inst);
+    // sti->setOperand(1, maskedPtr);
     CallInst::Create(m_f_checkSpatialStorePtr, args, "", Inst);
   }
 
@@ -2270,6 +2272,14 @@ void tasmChecking::handleCall(CallInst *call_inst) {
     // the calltee function return a pointer, and the res return by shadow
     // stack. res in the shadowStack index(with _shadow_stack_ptr)  is 0
     insertShadowStackLoads(call_inst, insert_at, 0);
+
+    // add type/key
+
+    SmallVector<Value *, 8> args;
+    CallInst *ptrKey =
+        CallInst::Create(m_f_allocatePtrKey, args, "", insert_at);
+    Value *ptr = call_inst;
+    associateTypeKey(ptr, m_type_heap,ptrKey);
   }
   // quit function: do deallocate.
   insertShadowStackDeallocation(call_inst, insert_at);
@@ -2983,9 +2993,52 @@ void tasmChecking::insertFuncKeyDealloca(Function *func, Value *funcId) {
   }
 }
 
-void tasmChecking::insertCallSiteFree(CallInst *call_Inst) {}
+void tasmChecking::insertTemporalChecks(Instruction *Inst) {
 
-void tasmChecking::insertTemporalChecks(Instruction *ptr) {}
+  SmallVector<Value *, 8> args;
+  Value *pointer_operand = NULL;
+  Value *pointer_to = NULL;
+  if (isa<LoadInst>(Inst)) {
+
+    LoadInst *ldi = dyn_cast<LoadInst>(Inst);
+    assert(ldi && "not a load instruction");
+    pointer_operand = ldi->getPointerOperand();
+    pointer_to = ldi;
+  }
+
+  if (isa<StoreInst>(Inst)) {
+
+    StoreInst *sti = dyn_cast<StoreInst>(Inst);
+    assert(sti && "not a store instruction");
+    pointer_operand = sti->getOperand(1);
+    pointer_to = sti->getOperand(0);
+  }
+
+  assert(pointer_operand && "pointer operand null?");
+
+
+  if (isa<LoadInst>(Inst)) {
+    LoadInst *ldi = dyn_cast<LoadInst>(Inst);
+    Value * ptrKey = getAssociatedKey(pointer_operand);
+    Value *type = getAssociatedType(pointer_operand);
+    insertCallSiteSetPtrType(pointer_operand, type, Inst);
+    insertCallSiteSetPtrKey(pointer_operand, ptrKey, Inst);
+    args.push_back(pointer_operand);
+    args.push_back(ptrKey);
+    CallInst::Create(m_f_checkTemporalLoadPtr, args, "", Inst);
+  } else {
+    StoreInst *sti = dyn_cast<StoreInst>(Inst);
+     Value * ptrKey = getAssociatedKey(pointer_operand);
+    Value *type = getAssociatedType(pointer_operand);
+    insertCallSiteSetPtrType(pointer_operand, type, Inst);
+    insertCallSiteSetPtrKey(pointer_operand, ptrKey, Inst);
+    args.push_back(pointer_operand);
+    args.push_back(ptrKey);
+    CallInst::Create(m_f_checkTemporalStorePtr, args, "", Inst);
+  }
+
+  return;
+}
 
 /**
  * Method: insertCallSiteSetPtrType
@@ -3009,7 +3062,14 @@ void tasmChecking::insertCallSiteSetPtrKey(Value *ptr, Value *key,
   args.push_back(key);
   CallInst::Create(m_f_setPointerKey, args, "", insert_at);
 }
+Value *tasmChecking::insertCallSiteMaskPtr(Value *ptr, Instruction *insert_at) {
 
+  SmallVector<Value *, 8> args;
+  args.push_back(ptr);
+  Value *maskedPtr = CallInst::Create(m_f_maskingPointer, args, "", insert_at);
+
+  return maskedPtr;
+}
 Value *tasmChecking::taggedPointer(Instruction *Inst, Value *ptr) {
   Value *taggedPointer;
 

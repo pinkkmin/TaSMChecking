@@ -3,7 +3,7 @@
 int array[154] ;
 int *ptr  = array + 400;
 void test(int *p, int a, int *c){
-    int aa =123;
+    int aa = 123;
 }
 int main() {
 

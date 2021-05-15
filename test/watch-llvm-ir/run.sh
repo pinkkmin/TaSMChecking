@@ -6,6 +6,8 @@ echo "--------------------------------------------------------------------------
 echo ""
 
 clang -Xclang -load -Xclang /root/TaSMChecking/project/libtasmc.so  test_2.c -lrt -lm -L/root/TaSMChecking/project -ltasmc_rt -o test_2
+
+# clang -Xclang -load -Xclang /root/TaSMChecking/project/libtasmc.so  test_2.c -lrt -lm -L/root/TaSMChecking/project -ltasmc_rt -S -o  test_2.asm
 clang test_2.c -emit-llvm -S -o test_2.ll
 echo ""
 echo "--------------------------------------------------------------------------------------------------------"
