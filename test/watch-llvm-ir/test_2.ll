@@ -32,6 +32,12 @@ define dso_local i32 @main() #0 {
   store i32 155, i32* %5, align 4
   %6 = load i32*, i32** @ptr, align 8
   store i32 12, i32* %6, align 4
+  %7 = load i32*, i32** @ptr, align 8
+  %8 = load i32*, i32** @ptr, align 8
+  call void @test(i32* %7, i32 12, i32* %8)
+  %9 = load i32*, i32** @ptr, align 8
+  %10 = load i32*, i32** @ptr, align 8
+  call void @test(i32* %9, i32 12, i32* %10)
   ret i32 0
 }
 

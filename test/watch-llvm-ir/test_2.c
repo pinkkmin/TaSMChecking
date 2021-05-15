@@ -12,6 +12,7 @@ int main() {
     *ptr = 155;
     //ptr += 15;
     *ptr = 12; 
-    //test(ptr, 12, ptr);
+    test(ptr, 12, ptr);
+    test(ptr, 12, ptr);
     return 0;
 }

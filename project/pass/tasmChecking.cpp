@@ -167,6 +167,7 @@ public:
   void handleAlloca(AllocaInst *, BasicBlock *, BasicBlock::iterator &); // yes
   void handleLoad(LoadInst *);                                           // yes
   void handleVectorStore(StoreInst *);
+  void handleStoreFirst(StoreInst *);
   void handleStore(StoreInst *);       // yes
   void handleGEP(GetElementPtrInst *); // yes
 
@@ -226,6 +227,7 @@ public:
   void dissociateTypeKey(Value *);
   Value *getAssociatedKey(Value *);
   Value *getAssociatedType(Value *);
+  bool isAssociateTypeKey(Value *ptr);
   void getConstantExprTypeKey(Constant *, Value *&, Value *&);
 
   void
@@ -767,9 +769,15 @@ Value *tasmChecking::getSizeOfType(Type *input_type) {
  */
 void tasmChecking::scanfFirstPass(Function *func) {
 
-  int arg_count = 0;
+  // allocate a function key for function
+  const std::string funcName(func->getName());
+  Value *funcId = m_func_id_pool[funcName];
+  Instruction *insert_at = &*(func->begin()->begin());
+  insertFuncKeyAlloca(funcId, insert_at);
 
-  /* Scan over the pointer arguments and introduce base and bound */
+  Value *funckey = m_func_key_pool[funcId];
+
+  int arg_count = 0;
 
   for (Function::arg_iterator ib = func->arg_begin(), ie = func->arg_end();
        ib != ie; ++ib) {
@@ -783,6 +791,9 @@ void tasmChecking::scanfFirstPass(Function *func) {
     Argument *ptr_argument = dyn_cast<Argument>(ib);
     Value *ptr_argument_value = ptr_argument;
     Instruction *fst_inst = &*(func->begin()->begin());
+
+    associateTypeKey(ptr_argument_value, m_type_stack, funckey);
+    
     if (ptr_argument->hasByValAttr()) {
       if (checkTypeHasPtrs(ptr_argument)) {
         assert(0 && "Pointer argument has byval attributes and the underlying "
@@ -794,13 +805,6 @@ void tasmChecking::scanfFirstPass(Function *func) {
       insertShadowStackLoads(ptr_argument_value, fst_inst, arg_count);
     }
   } // load pointer arguments end
-
-  // allocate a function key for function
-  const std::string funcName(func->getName());
-  Value *funcId = m_func_id_pool[funcName];
-  Instruction *insert_at = &*(func->begin()->begin());
-
-  insertFuncKeyAlloca(funcId, insert_at);
 
   /* Algorithm for propagating the base and bound.Each
    * basic block is visited only once.starting by visiting the
@@ -854,6 +858,8 @@ void tasmChecking::scanfFirstPass(Function *func) {
       case Instruction::Alloca: {
         AllocaInst *alloca_inst = dyn_cast<AllocaInst>(v1);
         assert(alloca_inst && "Not an Alloca inst?");
+
+        associateTypeKey(alloca_inst, m_type_stack, funckey);
         handleAlloca(alloca_inst, bb, i);
       } break;
 
@@ -878,7 +884,6 @@ void tasmChecking::scanfFirstPass(Function *func) {
       case Instruction::PHI: {
         PHINode *phi_node = dyn_cast<PHINode>(v1);
         assert(phi_node && "Not a phi node?");
-        // printInstructionMap(v1);
         handlePHIPass1(phi_node);
       }
       /* PHINode ends */
@@ -898,6 +903,9 @@ void tasmChecking::scanfFirstPass(Function *func) {
       } break;
 
       case Instruction::Store: {
+        StoreInst *store_inst = dyn_cast<StoreInst>(v1);
+        assert(store_inst && "Not a Store instruction?");
+        handleStoreFirst(store_inst);
         break;
       }
 
@@ -935,7 +943,7 @@ void tasmChecking::scanfFirstPass(Function *func) {
   }   // Function iterator Ends
 
   // todo: freeFunction-key
-   insertFuncKeyDealloca(func, funcId);
+  insertFuncKeyDealloca(func, funcId);
 }
 
 void tasmChecking::scanfSecondPass(Function *func) {
@@ -989,13 +997,6 @@ void tasmChecking::scanfSecondPass(Function *func) {
         StoreInst *store_inst = dyn_cast<StoreInst>(v1);
         assert(store_inst && "Not a Store instruction?");
         handleStore(store_inst);
-                
-        Function *func = store_inst->getFunction();
-        Value *funcId = m_func_id_pool[func->getName()];
-        Value *funcKey = m_func_key_pool[funcId];
-        Value *functionKey = m_func_key_pool[funcId];
-        insertCallSiteDebugPrintPtrfFunc(funcKey, m_one, store_inst);
-        insertCallSiteDebugPrintPtrfFunc(funcId, m_zero, store_inst);
       } break;
 
       case Instruction::PHI: {
@@ -1397,6 +1398,11 @@ void tasmChecking::handleGlobalArrayTypeInitializer(Module &module,
           Instruction *init_gv_inst = getGlobalInitInstruction(module);
           insertStoreBaseBoundFunc(child_gv, operand_base, operand_bound,
                                    init_gv_inst);
+
+          Value *tmp_type = NULL;
+          Value *tmp_key = NULL;
+          getConstantExprTypeKey(child_gv, tmp_type, tmp_key);
+          associateTypeKey(child_gv, tmp_type, tmp_key);
         }
         // else we don't care.
 
@@ -1475,6 +1481,11 @@ void tasmChecking::handleGlobalStructTypeInitializer(
 
       Instruction *init_gv_inst = getGlobalInitInstruction(module);
       insertStoreBaseBoundFunc(gv, operand_base, operand_bound, init_gv_inst);
+
+      Value *tmp_type = NULL;
+      Value *tmp_key = NULL;
+      getConstantExprTypeKey(gv, tmp_type, tmp_key);
+      associateTypeKey(gv, tmp_type, tmp_key);
     }
   }
 }
@@ -1496,14 +1507,12 @@ void tasmChecking::addBaseBoundGlobals(Module &module) {
       continue;
     }
 
-    // errs() << gv->getName();
+    // errs() << gv->getName() << "\n";
     if (!gv->hasInitializer())
       continue;
 
-    /* gv->hasInitializer() is true */
     Constant *initializer = dyn_cast<Constant>(it->getInitializer());
     if (!initializer) {
-      // errs() << "\n";
       continue;
     }
     // handler strcutType
@@ -1533,12 +1542,14 @@ void tasmChecking::addBaseBoundGlobals(Module &module) {
       Instruction *init_gv_inst = getGlobalInitInstruction(module);
 
       insertStoreBaseBoundFunc(gv, operand_base, operand_bound, init_gv_inst);
+      Value *tmp_type = NULL;
+      Value *tmp_key = NULL;
+      getConstantExprTypeKey(gv, tmp_type, tmp_key);
+      associateTypeKey(gv, tmp_type, tmp_key);
       continue;
     }
 
     if (isa<ArrayType>(initializer->getType())) {
-      // errs() << " is  ArrayType \n";
-      // errs() << "***************************************** \n";
       handleGlobalArrayTypeInitializer(module, gv);
     }
   }
@@ -1631,9 +1642,12 @@ void tasmChecking::insertMetadataLoad(LoadInst *load_inst) {
       new LoadInst(m_void_ptr_type, base_alloca, "base.load", insert_at);
   Instruction *bound_load =
       new LoadInst(m_void_ptr_type, bound_alloca, "bound.load", insert_at);
-
-  // insertCallSiteDebugPrintPtrfFunc(pointer_operand_bitcast, load_inst);
   associateBaseBound(load_inst_value, base_load, bound_load);
+
+  // to do associateTypeKey
+  Value *type = getAssociatedType(pointer_operand);
+  Value *key = getAssociatedKey(pointer_operand);
+  associateTypeKey(load_inst, type, key);
 }
 
 // copy by softboundcets
@@ -2147,20 +2161,34 @@ void tasmChecking::handleLoad(LoadInst *load_inst) {
 // do nothing.
 void tasmChecking::handleVectorStore(StoreInst *inst) {}
 
-void tasmChecking::handleStore(StoreInst *store_inst) {
+void tasmChecking::handleStoreFirst(StoreInst *store_inst) {
 
-  Function *func = store_inst->getFunction();
-  Value *funcId = m_func_id_pool[func->getName()];
-  Value *funcKey = m_func_key_pool[funcId];
-  Value *functionKey = m_func_key_pool[funcId];
-  // insertCallSiteDebugPrintPtrfFunc(funcKey, m_one, store_inst);
-  // insertCallSiteDebugPrintPtrfFunc(funcId, m_zero, store_inst);
-
-  getStackPtrTypeKey(store_inst);
   Value *operand = store_inst->getOperand(0);
   Value *pointer_dest = store_inst->getOperand(1);
   Instruction *insert_at = getNextInstruction(store_inst);
-  // errs() << "Store Inst: " << *store_inst << "\n";
+
+  if (!isa<PointerType>(operand->getType()))
+    return;
+
+  errs() << " store_inst: " << *store_inst << "\n";
+  errs() << " store: " << *operand << "\n";
+  Value *type = getAssociatedType(operand);
+  Value *key = getAssociatedKey(operand);
+  associateTypeKey(pointer_dest, type, key);
+
+  // Function *func = store_inst->getFunction();
+  // Value *funcId = m_func_id_pool[func->getName()];
+  // Value *funcKey = m_func_key_pool[funcId];
+  // Value *functionKey = m_func_key_pool[funcId];
+  // insertCallSiteDebugPrintPtrfFunc(funcKey, m_one, store_inst);
+  // insertCallSiteDebugPrintPtrfFunc(funcId, m_zero, store_inst);
+}
+void tasmChecking::handleStore(StoreInst *store_inst) {
+
+  Value *operand = store_inst->getOperand(0);
+  Value *pointer_dest = store_inst->getOperand(1);
+  Instruction *insert_at = getNextInstruction(store_inst);
+
   if (isa<VectorType>(operand->getType())) {
     const VectorType *vector_ty = dyn_cast<VectorType>(operand->getType());
     if (isa<PointerType>(vector_ty->getElementType())) {
@@ -2180,10 +2208,8 @@ void tasmChecking::handleStore(StoreInst *store_inst) {
      * store null to the shadow space
      */
     Value *size_of_type = NULL;
-
     insertStoreBaseBoundFunc(pointer_dest, m_void_null_ptr, m_void_null_ptr,
                              insert_at);
-
     return;
   }
 
@@ -2219,6 +2245,11 @@ void tasmChecking::handleGEP(GetElementPtrInst *gep_inst) {
 
 void tasmChecking::handleBitCast(BitCastInst *bitcast_inst) {
   Value *pointer_operand = bitcast_inst->getOperand(0);
+
+  Value *tmp_type = getAssociatedType(pointer_operand);
+  Value *tmp_key = getAssociatedKey(pointer_operand);
+  associateTypeKey(bitcast_inst, tmp_type, tmp_key);
+
   propagateMetadata(pointer_operand, bitcast_inst);
 }
 
@@ -2278,14 +2309,10 @@ void tasmChecking::handleCall(CallInst *call_inst) {
       return;
     }
     associateBaseBound(call_inst, m_void_null_ptr, m_void_null_ptr);
-    // todo : associate temporal
-    // associateKeyLock(call_inst, m_constantint64ty_zero, m_void_null_ptr);
-
     return;
   }
-  // errs() << isFuncDefTaSMC(func_name) << " " << func_name << "\n";
-  Instruction *insert_at = getNextInstruction(call_inst);
 
+  Instruction *insert_at = getNextInstruction(call_inst);
   // calls allocate function  at shadow stack
   // calls insert pointer info function to shadow stack
   insertShadowStackAllocation(call_inst);
@@ -2295,15 +2322,17 @@ void tasmChecking::handleCall(CallInst *call_inst) {
     // the calltee function return a pointer, and the res return by shadow
     // stack. res in the shadowStack index(with _shadow_stack_ptr)  is 0
     insertShadowStackLoads(call_inst, insert_at, 0);
+  }
 
-    // add type/key
-
+  if (func && (func->getName().find("_f_malloc") == 0)) {
+    Value *ptr = call_inst;
     SmallVector<Value *, 8> args;
     CallInst *ptrKey =
         CallInst::Create(m_f_allocatePtrKey, args, "", insert_at);
-    Value *ptr = call_inst;
+
     associateTypeKey(ptr, m_type_heap, ptrKey);
   }
+
   // quit function: do deallocate.
   insertShadowStackDeallocation(call_inst, insert_at);
 }
@@ -2327,32 +2356,6 @@ void tasmChecking::handleExtractElement(ExtractElementInst *EE_inst) {
   if (!isa<PointerType>(EE_inst->getType()))
     return;
   Value *EEIOperand = EE_inst->getOperand(0);
-
-  // if(isa<VectorType>(EEIOperand->getType())){
-
-  //   if(!m_vector_pointer_lock.count(EEIOperand) ||
-  //      !m_vector_pointer_base.count(EEIOperand) ||
-  //      !m_vector_pointer_bound.count(EEIOperand) ||
-  //      !m_vector_pointer_key.count(EEIOperand)){
-  //     assert(0 && "Extract element does not have vector metadata");
-  //   }
-
-  //   Constant* index = dyn_cast<Constant>(EEI->getOperand(1));
-
-  //   Value* vector_base = m_vector_pointer_base[EEIOperand];
-  //   Value* vector_bound = m_vector_pointer_bound[EEIOperand];
-  //   Value* vector_key = m_vector_pointer_key[EEIOperand];
-  //   Value* vector_lock = m_vector_pointer_lock[EEIOperand];
-
-  //   Value* ptr_base = ExtractElementInst::Create(vector_base, index, "",
-  //   EEI); Value* ptr_bound = ExtractElementInst::Create(vector_bound, index,
-  //   "", EEI); Value* ptr_key = ExtractElementInst::Create(vector_key, index,
-  //   "", EEI); Value* ptr_lock = ExtractElementInst::Create(vector_lock,
-  //   index, "", EEI);
-
-  //   associateBaseBound(EEI, ptr_base, ptr_bound);
-  //   return;
-  // }
 }
 
 // Method: handleSelect
@@ -2892,17 +2895,31 @@ void tasmChecking::dissociateTypeKey(Value *ptr) {
 }
 Value *tasmChecking::getAssociatedKey(Value *ptr) {
 
-  Value *key;
+  assert(m_pointer_key.count(ptr) && "the key lost?");
+
+  Value *key = m_pointer_key[ptr];
+  assert(key && "the key in the map but null?");
 
   return key;
 }
+
 Value *tasmChecking::getAssociatedType(Value *ptr) {
 
-  Value *type;
+  assert(m_pointer_type.count(ptr) && "the type lost?");
+
+  Value *type = m_pointer_type[ptr];
+  assert(type && "the type in the map but null?");
 
   return type;
 }
 
+bool tasmChecking::isAssociateTypeKey(Value *ptr) {
+
+  if (m_pointer_key.count(ptr) && m_pointer_type.count(ptr)) {
+    return true;
+  }
+  return false;
+}
 /**
  * method: getConstantExprTypeKey
  * description: tagged global constant pointer type&key.
@@ -2952,8 +2969,8 @@ void tasmChecking::getConstantExprTypeKey(Constant *given_constant,
         dyn_cast<PointerType>(given_constant->getType());
 
     if (isa<FunctionType>(func_ptr_type->getElementType())) {
-      tmp_type = m_type_global; // get type: others.
-      tmp_key = m_global_key;   // get key: invalid_key.
+      tmp_type = m_type_global; // get type: gobal.
+      tmp_key = m_global_key;   // get key: m_global_key.
       return;
     }
 
@@ -2965,8 +2982,8 @@ void tasmChecking::getConstantExprTypeKey(Constant *given_constant,
       return;
     }
 
-    tmp_type = m_type_global; // get type: others.
-    tmp_key = m_global_key;   // get key: invalid_key.
+    tmp_type = m_type_global; // get type: gobal.
+    tmp_key = m_global_key;   // get key: m_global_key.
   }
 }
 
@@ -3011,8 +3028,8 @@ void tasmChecking::insertFuncKeyDealloca(Function *func, Value *funcId) {
       args.push_back(funcId);
       Value *functionKey =
           CallInst::Create(m_f_deallocaFunctionKey, args, "", ret);
-          
-      //m_func_key_pool[funcId] = m_invalid_functionKey;
+
+      // m_func_key_pool[funcId] = m_invalid_functionKey;
     }
   }
 }
