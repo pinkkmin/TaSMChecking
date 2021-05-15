@@ -60,5 +60,6 @@
         "typeinfo": "cpp",
         "*.def": "cpp",
         "set": "cpp"
-    }
+    },
+    "commentTranslate.targetLanguage": "zh-CN"
 }

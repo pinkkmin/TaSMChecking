@@ -10,7 +10,7 @@ int main() {
     int a = 12;
     ptr = (int*)malloc(sizeof(int));
     *ptr = 155;
-    ptr += 15;
+    //ptr += 15;
     *ptr = 12; 
     //test(ptr, 12, ptr);
     return 0;

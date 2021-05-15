@@ -63,6 +63,9 @@ private:
   Value *m_global_key;  // 8190
   Value *m_invalid_key; // 8191
 
+  Value *m_zero;
+  Value *m_one;
+
   std::map<Value *, Value *> m_pointer_base;
   std::map<Value *, Value *> m_pointer_bound;
 
@@ -235,6 +238,7 @@ public:
   void insertCallSiteSetPtrKey(Value *, Value *, Instruction *);
   Value *insertCallSiteMaskPtr(Value *, Instruction *);
   Value *taggedPointer(Instruction *, Value *);
+  void getStackPtrTypeKey(Instruction *);
 
   void transformFunction(Module &, Function *);
   // debug calls
@@ -243,9 +247,12 @@ public:
     CallInst::Create(m_f_debugPrinfInfo, args, "", insert_at);
   }
 
-  void insertCallSiteDebugPrintPtrfFunc(Value *ptr, Instruction *insert_at) {
+  void insertCallSiteDebugPrintPtrfFunc(Value *ptr, Value *type,
+                                        Instruction *insert_at) {
     SmallVector<Value *, 8> args;
+
     args.push_back(ptr);
+    args.push_back(type);
     CallInst::Create(m_f_printfPointerDebug, args, "", insert_at);
   }
 
@@ -324,6 +331,9 @@ void tasmChecking::initTypeName(Module &module) {
                                    invalid_key, false);
   m_global_key = ConstantInt::get(Type::getInt32Ty(module.getContext()),
                                   global_key, false);
+
+  m_zero = ConstantInt::get(Type::getInt32Ty(module.getContext()), 0, false);
+  m_one = ConstantInt::get(Type::getInt32Ty(module.getContext()), 1, false);
 }
 
 /***
@@ -469,7 +479,8 @@ void tasmChecking::constructOthersHandlers(Module &module) {
 
   // debug function
   module.getOrInsertFunction("_f_debugPrinfInfo", VoidTy);
-  module.getOrInsertFunction("_f_printfPointerDebug", VoidTy, VoidPtrTy);
+  module.getOrInsertFunction("_f_printfPointerDebug", VoidTy, VoidPtrTy,
+                             SizeTy);
   module.getOrInsertFunction("_f_printfPtrBaseBound", VoidTy, VoidPtrTy,
                              VoidPtrTy, VoidPtrTy);
 
@@ -924,7 +935,7 @@ void tasmChecking::scanfFirstPass(Function *func) {
   }   // Function iterator Ends
 
   // todo: freeFunction-key
-  insertFuncKeyDealloca(func, funcId);
+   insertFuncKeyDealloca(func, funcId);
 }
 
 void tasmChecking::scanfSecondPass(Function *func) {
@@ -978,6 +989,13 @@ void tasmChecking::scanfSecondPass(Function *func) {
         StoreInst *store_inst = dyn_cast<StoreInst>(v1);
         assert(store_inst && "Not a Store instruction?");
         handleStore(store_inst);
+                
+        Function *func = store_inst->getFunction();
+        Value *funcId = m_func_id_pool[func->getName()];
+        Value *funcKey = m_func_key_pool[funcId];
+        Value *functionKey = m_func_key_pool[funcId];
+        insertCallSiteDebugPrintPtrfFunc(funcKey, m_one, store_inst);
+        insertCallSiteDebugPrintPtrfFunc(funcId, m_zero, store_inst);
       } break;
 
       case Instruction::PHI: {
@@ -1073,18 +1091,15 @@ void tasmChecking::insertDereferenceCheck(Function *func) {
         continue;
 
       if (isa<LoadInst>(new_inst)) {
-
         insertLoadStoreChecks(new_inst);
-        insertTemporalChecks(new_inst);
-        // todo : insert temporal
+        // insertTemporalChecks(new_inst);
         continue;
       }
 
       if (isa<StoreInst>(new_inst)) {
 
         insertLoadStoreChecks(new_inst);
-        insertTemporalChecks(new_inst);
-        // todo : insert temporal
+        // insertTemporalChecks(new_inst);
         continue;
       }
 
@@ -2046,7 +2061,7 @@ void tasmChecking::insertLoadStoreChecks(Instruction *Inst) {
     // Value *pointer = ldi->getPointerOperand();
     // Value *maskedPtr = insertCallSiteMaskPtr(pointer, Inst);
     // ldi->setOperand(0, maskedPtr);
-     // insertCallSiteSetPtrType(ptr, m_type_heap, insert_at);
+    // insertCallSiteSetPtrType(ptr, m_type_heap, insert_at);
     // insertCallSiteSetPtrKey(ptr, ptrKey, insert_at);
     CallInst::Create(m_f_checkSpatialLoadPtr, args, "", Inst);
   } else {
@@ -2134,6 +2149,14 @@ void tasmChecking::handleVectorStore(StoreInst *inst) {}
 
 void tasmChecking::handleStore(StoreInst *store_inst) {
 
+  Function *func = store_inst->getFunction();
+  Value *funcId = m_func_id_pool[func->getName()];
+  Value *funcKey = m_func_key_pool[funcId];
+  Value *functionKey = m_func_key_pool[funcId];
+  // insertCallSiteDebugPrintPtrfFunc(funcKey, m_one, store_inst);
+  // insertCallSiteDebugPrintPtrfFunc(funcId, m_zero, store_inst);
+
+  getStackPtrTypeKey(store_inst);
   Value *operand = store_inst->getOperand(0);
   Value *pointer_dest = store_inst->getOperand(1);
   Instruction *insert_at = getNextInstruction(store_inst);
@@ -2279,7 +2302,7 @@ void tasmChecking::handleCall(CallInst *call_inst) {
     CallInst *ptrKey =
         CallInst::Create(m_f_allocatePtrKey, args, "", insert_at);
     Value *ptr = call_inst;
-    associateTypeKey(ptr, m_type_heap,ptrKey);
+    associateTypeKey(ptr, m_type_heap, ptrKey);
   }
   // quit function: do deallocate.
   insertShadowStackDeallocation(call_inst, insert_at);
@@ -2988,7 +3011,8 @@ void tasmChecking::insertFuncKeyDealloca(Function *func, Value *funcId) {
       args.push_back(funcId);
       Value *functionKey =
           CallInst::Create(m_f_deallocaFunctionKey, args, "", ret);
-      m_func_key_pool[funcId] = m_invalid_functionKey;
+          
+      //m_func_key_pool[funcId] = m_invalid_functionKey;
     }
   }
 }
@@ -3016,23 +3040,22 @@ void tasmChecking::insertTemporalChecks(Instruction *Inst) {
 
   assert(pointer_operand && "pointer operand null?");
 
-
   if (isa<LoadInst>(Inst)) {
-    LoadInst *ldi = dyn_cast<LoadInst>(Inst);
-    Value * ptrKey = getAssociatedKey(pointer_operand);
-    Value *type = getAssociatedType(pointer_operand);
-    insertCallSiteSetPtrType(pointer_operand, type, Inst);
-    insertCallSiteSetPtrKey(pointer_operand, ptrKey, Inst);
-    args.push_back(pointer_operand);
+
+    Value *ptrKey = getAssociatedKey(pointer_operand);
+    if (ptrKey == NULL)
+      errs() << "ptr NUll load\n";
+    Value *checkPtr = taggedPointer(Inst, pointer_operand);
+    args.push_back(checkPtr);
     args.push_back(ptrKey);
     CallInst::Create(m_f_checkTemporalLoadPtr, args, "", Inst);
   } else {
-    StoreInst *sti = dyn_cast<StoreInst>(Inst);
-     Value * ptrKey = getAssociatedKey(pointer_operand);
-    Value *type = getAssociatedType(pointer_operand);
-    insertCallSiteSetPtrType(pointer_operand, type, Inst);
-    insertCallSiteSetPtrKey(pointer_operand, ptrKey, Inst);
-    args.push_back(pointer_operand);
+
+    Value *ptrKey = getAssociatedKey(pointer_operand);
+    if (ptrKey == NULL)
+      errs() << "ptr NUll load\n";
+    Value *checkPtr = taggedPointer(Inst, pointer_operand);
+    args.push_back(checkPtr);
     args.push_back(ptrKey);
     CallInst::Create(m_f_checkTemporalStorePtr, args, "", Inst);
   }
@@ -3062,20 +3085,34 @@ void tasmChecking::insertCallSiteSetPtrKey(Value *ptr, Value *key,
   args.push_back(key);
   CallInst::Create(m_f_setPointerKey, args, "", insert_at);
 }
+
 Value *tasmChecking::insertCallSiteMaskPtr(Value *ptr, Instruction *insert_at) {
 
   SmallVector<Value *, 8> args;
   args.push_back(ptr);
   Value *maskedPtr = CallInst::Create(m_f_maskingPointer, args, "", insert_at);
-
   return maskedPtr;
 }
-Value *tasmChecking::taggedPointer(Instruction *Inst, Value *ptr) {
-  Value *taggedPointer;
 
+Value *tasmChecking::taggedPointer(Instruction *Inst, Value *ptr) {
+  Value *taggedPointer = insertCallSiteMaskPtr(ptr, Inst);
+  Value *ptrKey = getAssociatedKey(ptr);
+  Value *type = getAssociatedType(ptr);
+  insertCallSiteSetPtrType(taggedPointer, type, Inst);
+  insertCallSiteSetPtrKey(taggedPointer, ptrKey, Inst);
   return taggedPointer;
 }
+void tasmChecking::getStackPtrTypeKey(Instruction *inst) {
 
+  Function *func = inst->getFunction();
+
+  Value *funcId = m_func_id_pool[func->getName()];
+  Value *funcKey = m_func_key_pool[funcId];
+
+  // Value *functionKey = m_func_key_pool[funcId];
+  // insertCallSiteDebugPrintPtrfFunc(funcKey, m_one, inst);
+  // insertCallSiteDebugPrintPtrfFunc(funcId, m_zero, inst);
+}
 void tasmChecking::transformFunction(Module &module, Function *func) {
 
   Type *retType = func->getReturnType();

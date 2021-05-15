@@ -226,15 +226,15 @@ void _f_callAbort(int type) {
     abort();
 }
 
-void _f_printfPointerDebug(void* ptr) {   
+void _f_printfPointerDebug(void* ptr,size_t type) {   
 
     size_t value = (size_t)ptr;
-    size_t ptrType = _f_getPointerType(ptr);
-    size_t ptrKey = _f_getPointerKey(ptr);
-    size_t ptrAddr = (size_t)_f_maskingPointer(ptr);
-
-    printf("[TaSMC Debug] value = 0x%zx, ptrType = 0x%zx, ptrKey = 0x%zx, ptrAddr = 0x%zx.\n", value, ptrType, ptrKey, ptrAddr);
-    //printf("tips: ~ ( ty : 000:heap, 001:stack, 010:global, 011:others ) ! ! !\n\n");
+    if(type == 0) {
+        printf("[TaSMC Debug] funcId = 0x%zx\n", value);
+    }else {
+         printf("[TaSMC Debug] funcKey = 0x%zx\n", value);
+    }
+   
 }
 
 void _f_debugPrinfInfo(){

@@ -109,7 +109,7 @@ static const size_t _BITS_63_TO_48_MASK = 0xFFFFFFFFFFFF;
 
 // declare function
 void _f_tasmcPrintf(const char* str, ...);
-void _f_printfPointerDebug(void* ptr);
+void _f_printfPointerDebug(void* ptr, size_t type);
 void _f_callAbort(int type);
 void* _f_maskingPointer(void* ptr);
 void _f_printfPtrBaseBound(void* , void* , void*);
@@ -326,7 +326,7 @@ void* _f_typeCasePointer(void* ptr) {
 void _f_deallocaFunctionKey(size_t functionId) {
     size_t functionKey =  *(_function_key_pool + functionId);
     if(functionKey <= 0) _f_callAbort(ERROR_FUNCTION_CALLING);
-
+    printf("deallocate function key \n");
     *(_function_key_pool + functionId) -= 0;
 }
 
