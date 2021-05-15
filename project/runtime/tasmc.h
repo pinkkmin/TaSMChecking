@@ -586,9 +586,9 @@ void _f_checkSpatialLoadPtr(void* ptr, void* base, void* bound, size_t size){
    
     void* addr = _f_maskingPointer(ptr);
     if ((addr < base) || ((void*)(addr + size) > bound)) {
-        _f_tasmcPrintf("\nTaSMChecking:: In  Load Dereference Checking, ptr=%zx, base=%zx, bound=%zx\n",
-        ptr,base, bound);  
-                   _f_callAbort(ERROR_OF_SPATIAL_LDC);
+        _f_tasmcPrintf("\nTaSMChecking:: In  Load Dereference Checking, ptr=%zx, base=%zx, bound=%zx, size=%d\n",
+            ptr, base, bound, size);  
+        _f_callAbort(ERROR_OF_SPATIAL_LDC);
     }
 }
 
@@ -596,8 +596,8 @@ void _f_checkSpatialStorePtr(void* ptr, void* base, void* bound, size_t size){
    
     void* addr = _f_maskingPointer(ptr);    
     if ((addr < base) || ((void*)(addr + size) > bound)) {
-        _f_tasmcPrintf("\nTaSMChecking:: In  Store Dereference Checking, ptr=%zx, base=%zx, bound=%zx\n",
-        ptr, base, bound);  
+        _f_tasmcPrintf("\nTaSMChecking:: In  Store Dereference Checking, ptr=%zx, base=%zx, bound=%zx, size=%d\n",
+            ptr, base, bound, size);  
         _f_callAbort(ERROR_OF_SPATIAL_SDC);
     }
 
@@ -691,5 +691,51 @@ void _f_printfPtrBaseBound(void* addr_of_ptr, void* base, void* bound){
     printf(" base: %zx, ", (size_t)base);
     printf(" bound : %zx, ", (size_t)bound);
     printf(" addr_of_ptr : %zx \n", (size_t)addr_of_ptr);
+}
+ void* _tasmc_malloc(size_t size) {
+  
+  char* ret_ptr = (char*)malloc(size);
+  if(ret_ptr == NULL){
+    _tasmc_store_null_return_metadata();
+  }
+  else{
+
+    char* ret_bound = ret_ptr + size;
+    _tasmc_store_return_metadata(ret_ptr, ret_bound);
+
+  }
+  return ret_ptr;
+}
+
+_tasmc_store_return_metadata(void* base, void* bound){
+
+  _tasmc_store_base_shadow_stack(base, 0);
+  _tasmc_store_bound_shadow_stack(bound, 0);
+
+}
+
+ void _tasmc_store_base_shadow_stack(void* base, int arg_no){
+  
+  assert(arg_no >= 0);
+  size_t count = 2 +  arg_no * _METADATA_NUM_FIELDS + _BASE_INDEX ;
+  void** base_ptr = (void**)(_shadow_stack_ptr + count); 
+
+  *(base_ptr) = base;
+
+}
+
+void _tasmc_store_bound_shadow_stack(void* bound, int arg_no){
+
+  assert(arg_no >= 0);
+  size_t count = 2 +  arg_no * _METADATA_NUM_FIELDS + _BOUND_INDEX ;
+  void** bound_ptr = (void**)(_shadow_stack_ptr + count); 
+
+  *(bound_ptr) = bound;
+}
+
+ void _tasmc_store_null_return_metadata(){
+
+  _tasmc_store_base_shadow_stack(NULL, 0);
+  _tasmc_store_bound_shadow_stack(NULL, 0);
 }
 #endif

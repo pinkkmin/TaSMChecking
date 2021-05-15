@@ -236,6 +236,7 @@ public:
   void insertCallSiteSetPtrKey(Value *, Value *, Instruction *);
   Value *taggedPointer(Instruction *, Value *);
 
+  void transformFunction(Module &, Function *);
   // debug calls
   void insertCallSiteDebugFunc(Instruction *insert_at) {
     SmallVector<Value *, 8> args;
@@ -539,7 +540,6 @@ void tasmChecking::constructOthersHandlers(Module &module) {
   // _tasmc_trie_entry* _f_trie_allocate();
   // void* _f_safe_mmap(void* addr, size_t length, int prot, int flags, int fd,
   // off_t offset);
-  // void* _f_malloc(size_t size);
   // void _f_free(void* ptr);
 }
 
@@ -1504,8 +1504,8 @@ void tasmChecking::addBaseBoundGlobals(Module &module) {
     // handler poninterType : if & must be initing by
     // getelementptr/bitcast...to.../inttoptr
     if (isa<PointerType>(initializer->getType())) {
-      errs() << " is PointerType \n";
-      errs() << "***************************************** \n";
+      // errs() << " is PointerType \n";
+      // errs() << "***************************************** \n";
       Value *operand_base = NULL;
       Value *operand_bound = NULL;
       Value *initializer = gv->getInitializer();
@@ -1917,7 +1917,7 @@ void tasmChecking::addTasmcRtFunctionToMap() {
   m_func_def_tasmc["__option_is_short"] = true;
 
   // test add
-  m_func_def_tasmc["malloc"] = true;
+  //  m_func_def_tasmc["malloc"] = true;
 }
 
 /* returns the next instruction after the input instruction.
@@ -2246,6 +2246,11 @@ void tasmChecking::handleCall(CallInst *call_inst) {
     addMemcopyMemsetCheck(call_inst, func);
   }
 
+  if (func && func->getName().find("malloc") == 0) {
+    // transformMalloc(call_inst, func);
+    return;
+  }
+
   const std::string func_name(func->getName());
 
   if (func && isFuncDefTaSMC(func_name)) {
@@ -2258,7 +2263,7 @@ void tasmChecking::handleCall(CallInst *call_inst) {
 
     return;
   }
-  errs() << isFuncDefTaSMC(func_name) << " " << func_name << "\n";
+  // errs() << isFuncDefTaSMC(func_name) << " " << func_name << "\n";
   Instruction *insert_at = getNextInstruction(call_inst);
 
   // calls allocate function  at shadow stack
@@ -3015,6 +3020,59 @@ Value *tasmChecking::taggedPointer(Instruction *Inst, Value *ptr) {
 
   return taggedPointer;
 }
+
+void tasmChecking::transformFunction(Module &module, Function *func) {
+
+  Type *retType = func->getReturnType();
+  FunctionType *funcType = func->getFunctionType();
+  std::vector<Type *> args;
+
+  const AttributeList &Attrs = func->getAttributes();
+  AttributeSet FnAttrs = Attrs.getAttributes(AttributeList::FunctionIndex);
+  AttributeSet RetAttrs = Attrs.getAttributes(AttributeList::ReturnIndex);
+  SmallVector<AttributeSet, 8> argAttrs;
+
+  int arg_index = 1;
+  for (Function::arg_iterator i = func->arg_begin(), e = func->arg_end();
+       i != e; ++i, arg_index++) {
+    args.push_back(i->getType());
+    AttributeSet attrs = Attrs.getParamAttributes(arg_index);
+    if (attrs.hasAttributes()) {
+      AttrBuilder B(attrs);
+      argAttrs.push_back(AttributeSet::get(func->getContext(), B));
+    }
+  }
+
+  FunctionType *newFuncType =
+      FunctionType::get(retType, args, funcType->isVarArg());
+  Function *newFunc = NULL;
+  std::string newFuncName = "_f_";
+  newFuncName += func->getName();
+  newFunc = Function::Create(newFuncType, func->getLinkage(), newFuncName);
+
+  newFunc->copyAttributesFrom(func);
+  ArrayRef<AttributeSet> ArgAttrs(argAttrs);
+  newFunc->setAttributes(
+      AttributeList::get(func->getContext(), FnAttrs, RetAttrs, ArgAttrs));
+
+  func->getParent()->getFunctionList().insert(func->getIterator(), newFunc);
+  func->replaceAllUsesWith(newFunc);
+
+  newFunc->getBasicBlockList().splice(newFunc->begin(),
+                                      func->getBasicBlockList());
+
+  Function::arg_iterator arg_newFunc = newFunc->arg_begin();
+  for (Function::arg_iterator arg_i = func->arg_begin(),
+                              arg_e = func->arg_end();
+       arg_i != arg_e; ++arg_i) {
+    arg_i->replaceAllUsesWith(&*arg_newFunc);
+    arg_newFunc->takeName(&*arg_i);
+    ++arg_newFunc;
+  }
+
+  func->eraseFromParent();
+}
+
 /****************************************************************************************************************************************/
 bool tasmChecking::runOnModule(Module &module) {
 
@@ -3023,7 +3081,16 @@ bool tasmChecking::runOnModule(Module &module) {
 
   // transform main() to _f_pseudoMain()
   transformMainFunc(module);
+  Function *mallocFunc = module.getFunction("malloc");
+  if (mallocFunc) {
+    transformFunction(module, mallocFunc);
+  }
 
+  Function *freeFunc = module.getFunction("free");
+  if (freeFunc) {
+    transformFunction(module, freeFunc);
+  }
+  
   // add global value:ptr to metadata.
   addBaseBoundGlobals(module);
 
@@ -3040,7 +3107,7 @@ bool tasmChecking::runOnModule(Module &module) {
     }
 
     const std::string funcName(func_ptr->getName());
-    errs() << funcName << "\n";
+    // errs() << funcName << "\n";
 
     isAllocateFuncId(module, funcName); // allocate a functionId
     /** else do three pass

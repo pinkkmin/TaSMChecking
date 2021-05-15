@@ -3,8 +3,21 @@ source_filename = "test_2.c"
 target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
 target triple = "x86_64-unknown-linux-gnu"
 
-@ptr = dso_local global i32* null, align 8
 @array = dso_local global [154 x i32] zeroinitializer, align 16
+@ptr = dso_local global i32* bitcast (i8* getelementptr (i8, i8* bitcast ([154 x i32]* @array to i8*), i64 1600) to i32*), align 8
+
+; Function Attrs: noinline nounwind optnone uwtable
+define dso_local void @test(i32* %0, i32 %1, i32* %2) #0 {
+  %4 = alloca i32*, align 8
+  %5 = alloca i32, align 4
+  %6 = alloca i32*, align 8
+  %7 = alloca i32, align 4
+  store i32* %0, i32** %4, align 8
+  store i32 %1, i32* %5, align 4
+  store i32* %2, i32** %6, align 8
+  store i32 123, i32* %7, align 4
+  ret void
+}
 
 ; Function Attrs: noinline nounwind optnone uwtable
 define dso_local i32 @main() #0 {
@@ -16,7 +29,7 @@ define dso_local i32 @main() #0 {
   %4 = bitcast i8* %3 to i32*
   store i32* %4, i32** @ptr, align 8
   %5 = load i32*, i32** @ptr, align 8
-  store i32 12, i32* %5, align 4
+  store i32 155, i32* %5, align 4
   ret i32 0
 }
 
