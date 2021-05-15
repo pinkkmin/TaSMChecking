@@ -220,11 +220,13 @@ void _f_setPointerKey(void* addr_of_ptr, size_t key) {
 
 void* _f_setPointerTypeKey(void* ptr, size_t type, size_t key){
 
-    size_t value = *((size_t*)ptr) & _BITS_62_TO_61_NEG;
+    size_t value = (size_t)ptr & _BITS_62_TO_61_NEG;
     type = type <<(_BITS_OF_SIZET-3);
     value = value | type;
+   
     value =  value  & _BITS_60_TO_48_NEG;
     value = value | (key<<(_BITS_OF_SIZET-16));
+    
     return  (void*)value;
 }
 

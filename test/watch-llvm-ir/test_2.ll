@@ -30,19 +30,18 @@ define dso_local i32 @main() #0 {
   store i32* %4, i32** @ptr, align 8
   %5 = load i32*, i32** @ptr, align 8
   store i32 155, i32* %5, align 4
+  store i32* %2, i32** @ptr, align 8
   %6 = load i32*, i32** @ptr, align 8
-  store i32 12, i32* %6, align 4
-  %7 = load i32*, i32** @ptr, align 8
-  %8 = load i32*, i32** @ptr, align 8
-  call void @test(i32* %7, i32 12, i32* %8)
-  %9 = load i32*, i32** @ptr, align 8
-  %10 = load i32*, i32** @ptr, align 8
-  call void @test(i32* %9, i32 12, i32* %10)
+  %7 = bitcast i32* %6 to i8*
+  call void @free(i8* %7) #2
   ret i32 0
 }
 
 ; Function Attrs: nounwind
 declare dso_local noalias i8* @malloc(i64) #1
+
+; Function Attrs: nounwind
+declare dso_local void @free(i8*) #1
 
 attributes #0 = { noinline nounwind optnone uwtable "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "frame-pointer"="all" "less-precise-fpmad"="false" "min-legal-vector-width"="0" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cx8,+fxsr,+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="false" "use-soft-float"="false" }
 attributes #1 = { nounwind "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "frame-pointer"="all" "less-precise-fpmad"="false" "no-infs-fp-math"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cx8,+fxsr,+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="false" "use-soft-float"="false" }

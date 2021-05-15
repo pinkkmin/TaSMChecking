@@ -1860,7 +1860,7 @@ void tasmChecking::addTasmcRtFunctionToMap() {
   m_func_def_tasmc["_f_storeBoundOfShadowStack"] = true;
   m_func_def_tasmc["_f_storeMetaData"] = true;
   //  m_func_def_tasmc["_f_malloc"] = true;
-  m_func_def_tasmc["_f_free"] = true;
+  // m_func_def_tasmc["_f_free"] = true;
   m_func_def_tasmc["_f_safe_mmap"] = true;
 
   m_func_def_tasmc["_f_tasmcPrintf"] = true;
@@ -2298,6 +2298,16 @@ void tasmChecking::handleCall(CallInst *call_inst) {
 
   Value *mcall = call_inst;
   Function *func = call_inst->getCalledFunction();
+  Instruction *insert_at = getNextInstruction(call_inst);
+
+  if (func && (func->getName().find("_f_free") == 0)) {
+    Value *arg = call_inst->getArgOperand(0);
+    Value *free_ptr = taggedPointer(call_inst, arg);
+   // insertCallSiteDebugPrintPtrfFunc(free_ptr, m_type_global, call_inst);
+    call_inst->setArgOperand(0, free_ptr);
+   // errs() << "called :" << *call_inst << "\n";
+    return;
+  }
 
   if (func && ((func->getName().find("llvm.memcpy") == 0) ||
                (func->getName().find("llvm.memmove") == 0))) {
@@ -2322,7 +2332,6 @@ void tasmChecking::handleCall(CallInst *call_inst) {
     return;
   }
 
-  Instruction *insert_at = getNextInstruction(call_inst);
   // calls allocate function  at shadow stack
   // calls insert pointer info function to shadow stack
   insertShadowStackAllocation(call_inst);
@@ -3045,8 +3054,8 @@ void tasmChecking::insertFuncKeyDealloca(Function *func, Value *funcId) {
 }
 
 void tasmChecking::insertTemporalChecks(Instruction *Inst) {
-  
-  Value* funcId = m_func_id_pool[Inst->getFunction()->getName()];
+
+  Value *funcId = m_func_id_pool[Inst->getFunction()->getName()];
   SmallVector<Value *, 8> args;
   Value *pointer_operand = NULL;
   Value *pointer_to = NULL;
@@ -3083,8 +3092,6 @@ void tasmChecking::insertTemporalChecks(Instruction *Inst) {
     if (ptrKey == NULL)
       errs() << "ptr NUll Store\n";
     Value *checkPtr = taggedPointer(Inst, pointer_operand);
-    insertCallSiteDebugPrintPtrfFunc(checkPtr, m_type_global, Inst);
-    insertCallSiteDebugPrintPtrfFunc(ptrKey, m_one, Inst);
     args.push_back(checkPtr);
     args.push_back(funcId);
     CallInst::Create(m_f_checkTemporalStorePtr, args, "", Inst);
@@ -3142,10 +3149,11 @@ Value *tasmChecking::taggedPointer(Instruction *Inst, Value *ptr) {
   Value *type = getAssociatedType(ptr);
   // if (isa<LoadInst>(Inst)) {
   // insertCallSiteDebugPrintPtrfFunc(ptr, m_type_global, Inst);
-  // // insertCallSiteDebugPrintPtrfFunc(type, m_zero, Inst);
+  // insertCallSiteDebugPrintPtrfFunc(type, m_zero, Inst);
   // insertCallSiteDebugPrintPtrfFunc(ptrKey, m_one, Inst);
   // }
   return insertCallSiteSetPtrTypeKey(ptr, type, ptrKey, Inst);
+ 
 }
 void tasmChecking::getStackPtrTypeKey(Instruction *inst) {
 

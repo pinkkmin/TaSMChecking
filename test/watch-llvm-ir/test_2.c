@@ -11,8 +11,11 @@ int main() {
     ptr = (int*)malloc(sizeof(int));
     *ptr = 155;
     //ptr += 15;
-    *ptr = 12; 
-    test(ptr, 12, ptr);
-    test(ptr, 12, ptr);
+    ptr = &a; 
+    // test(ptr, 12, ptr);
+    // test(ptr, 12, ptr);
+
+    free(ptr);
+   // free(ptr);
     return 0;
 }
