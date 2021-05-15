@@ -1817,7 +1817,7 @@ void tasmChecking::addTasmcRtFunctionToMap() {
   m_func_def_tasmc["_f_storeBaseOfShadowStack"] = true;
   m_func_def_tasmc["_f_storeBoundOfShadowStack"] = true;
   m_func_def_tasmc["_f_storeMetaData"] = true;
-  m_func_def_tasmc["_f_malloc"] = true;
+//  m_func_def_tasmc["_f_malloc"] = true;
   m_func_def_tasmc["_f_free"] = true;
   m_func_def_tasmc["_f_safe_mmap"] = true;
 
@@ -2244,11 +2244,6 @@ void tasmChecking::handleCall(CallInst *call_inst) {
 
   if (func && func->getName().find("llvm.memset") == 0) {
     addMemcopyMemsetCheck(call_inst, func);
-  }
-
-  if (func && func->getName().find("malloc") == 0) {
-    // transformMalloc(call_inst, func);
-    return;
   }
 
   const std::string func_name(func->getName());
@@ -3090,7 +3085,7 @@ bool tasmChecking::runOnModule(Module &module) {
   if (freeFunc) {
     transformFunction(module, freeFunc);
   }
-  
+
   // add global value:ptr to metadata.
   addBaseBoundGlobals(module);
 

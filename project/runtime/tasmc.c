@@ -117,7 +117,6 @@ void* _f_safe_mmap(void* addr,
 
 void* _f_malloc(size_t size){
   
-  printf("yes _f_malloc\n");
   char* ret_ptr = (char*)malloc(size);
   if(ret_ptr == NULL){
     _tasmc_store_null_return_metadata();
@@ -125,7 +124,7 @@ void* _f_malloc(size_t size){
   else{
 
     char* ret_bound = ret_ptr + size;
-    //_tasmc_store_return_metadata(ret_ptr, ret_bound);
+    _tasmc_store_return_metadata(ret_ptr, ret_bound);
 
   }
   return ret_ptr;

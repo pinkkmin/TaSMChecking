@@ -30,6 +30,11 @@ define dso_local i32 @main() #0 {
   store i32* %4, i32** @ptr, align 8
   %5 = load i32*, i32** @ptr, align 8
   store i32 155, i32* %5, align 4
+  %6 = load i32*, i32** @ptr, align 8
+  %7 = getelementptr inbounds i32, i32* %6, i64 15
+  store i32* %7, i32** @ptr, align 8
+  %8 = load i32*, i32** @ptr, align 8
+  store i32 12, i32* %8, align 4
   ret i32 0
 }
 
