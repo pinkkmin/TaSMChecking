@@ -30,6 +30,8 @@
 #define ERROR_OF_UNFREE_ABLE 212  // free variable in stack.
 #define ERROR_OF_FREE 213  // free  errors
 
+#define ERROR_OF_TEMPORAL_GLB 260
+
 #define ERROR_OF_DEREFERENCE 26
 
 #define ERROR_FUNCTION_POOL_OVERFLOW 30

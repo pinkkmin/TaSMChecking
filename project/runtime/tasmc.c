@@ -133,7 +133,7 @@ void _f_free(void* ptr){
   
   size_t flag = _f_isFreeAbleOfPointer(ptr);
   size_t ty = _f_getPointerType(ptr);
-  printf("type: %d\n", ty);
+//   printf("type: %d\n", ty);
   // only hep can free
   if(ty != TYPE_HEAP) _f_callAbort(ERROR_OF_UNFREE_ABLE);
 
@@ -141,7 +141,7 @@ void _f_free(void* ptr){
   if(flag != PTR_FREE_ABLE) _f_callAbort(ERROR_OF_FREE);
   
   void* realPtrAddr = _f_maskingPointer(ptr);
-  printf("realPtrAddr: %zx \n", realPtrAddr);
+//   printf("realPtrAddr: %zx \n", realPtrAddr);
   // remove ptr from free_able_pool
   _f_removePtrFromFreeTable(ptr);
   free(realPtrAddr);
@@ -203,7 +203,10 @@ void _f_callAbort(int type) {
     case ERROR_OF_DEREFERENCE:
         fprintf(stderr, "abort: tasmc dereference errors... ... \n");
         break;
-
+    case ERROR_OF_TEMPORAL_GLB:
+        fprintf(stderr, "abort: tasmc global load error... ... \n");
+        break;
+    
     case ERROR_OF_UNFREE_ABLE:
         fprintf(stderr, "abort: tasmc can't free this memory.... ... \n");
         break;

@@ -330,7 +330,7 @@ void tasmChecking::initTypeName(Module &module) {
                                   type_other, false);
 
   size_t invalid_key = (size_t)8191;
-  size_t global_key = (size_t)8090;
+  size_t global_key = (size_t)8190;
   m_invalid_key = ConstantInt::get(Type::getInt32Ty(module.getContext()),
                                    invalid_key, false);
   m_global_key = ConstantInt::get(Type::getInt32Ty(module.getContext()),
@@ -2250,6 +2250,9 @@ void tasmChecking::handleStore(StoreInst *store_inst) {
 
 void tasmChecking::handleGEP(GetElementPtrInst *gep_inst) {
   Value *getelementptr_operand = gep_inst->getPointerOperand();
+  Value *tmp_type = getAssociatedType(getelementptr_operand);
+  Value *tmp_key = getAssociatedKey(getelementptr_operand);
+  associateTypeKey(gep_inst, tmp_type, tmp_key);
   propagateMetadata(getelementptr_operand, gep_inst);
 }
 
@@ -2288,7 +2291,7 @@ void tasmChecking::handlePHIPass1(PHINode *phi_node) {
   Value *bound_phi_node_value = bound_phi_node;
 
   associateBaseBound(phi_node, base_phi_node_value, bound_phi_node_value);
-
+  
   // todo:temporal
 }
 
@@ -2446,7 +2449,7 @@ void tasmChecking::handleIntToPtr(IntToPtrInst *inttoptr_inst) {
   Value *inst = inttoptr_inst;
 
   associateBaseBound(inst, m_void_null_ptr, m_void_null_ptr);
-
+  associateTypeKey(inst, m_type_heap, m_invalid_key);
   // todo: temporal
 }
 

@@ -49,9 +49,10 @@
 #define TaSMC_MMAP_FLAGS (MAP_PRIVATE|MAP_ANONYMOUS|MAP_NORESERVE)
 
 // invalid vlaue of pointer
-#define INVALID_PTR_KEY -1
+#define INVALID_PTR_KEY 8191
 #define INVALID_PTR_BASE -1
 #define INVALID_PTR_BOUND -1 
+#define GLOBAL_KEY 8190
 
 // pointer is free_able or free_unable. 
 #define PTR_FREE_ABLE 1
@@ -330,7 +331,7 @@ void* _f_typeCasePointer(void* ptr) {
     size_t _f_allocateFunctionKey(size_t functionId) {
      *(_function_key_pool + functionId) = functionKey++;
      if(functionKey == 8192) functionKey = 1;
-        printf("allocate function key \n");
+        // printf("allocate function key \n");
      size_t key = *(_function_key_pool + functionId);
      return key;
 }
@@ -338,7 +339,7 @@ void* _f_typeCasePointer(void* ptr) {
 void _f_deallocaFunctionKey(size_t functionId) {
     size_t functionKey =  *(_function_key_pool + functionId);
     if(functionKey < 0) _f_callAbort(ERROR_FUNCTION_CALLING);
-    printf("deallocate function key \n");
+    // printf("deallocate function key \n");
     *(_function_key_pool + functionId) -= 0;
 }
 
@@ -637,7 +638,15 @@ void _f_checkTemporalLoadPtr(void* ptr, size_t functionId){
            _f_callAbort(ERROR_OF_TEMPORAL_LDC);
        }  
     }
-    else {  // stack,global ...
+    else if(type == TYPE_GLOBAL) {
+        size_t key = _f_getPointerKey(ptr);
+        if(key!= GLOBAL_KEY) { 
+            _f_tasmcPrintf("\n TaSMChecking:: temporal load check, global  key errors. key = %zx,ptr =%zx\n", 
+                key,ptr);
+            _f_callAbort(ERROR_OF_TEMPORAL_GLB);
+        }
+    }
+    else {  // stack
         size_t status = _f_checkPtrKeyWithFuncKey(ptr, functionId);
         if(status != PTR_KEY_OK) {
             size_t functionKey = _f_getFunctionKey(functionId);
@@ -661,7 +670,15 @@ void _f_checkTemporalStorePtr(void* ptr, size_t functionId) {
            _f_callAbort(ERROR_OF_TEMPORAL_SDC);
        }  
     }
-    else {  // stack,global ...
+    else if(type == TYPE_GLOBAL) { //global ...
+        size_t key = _f_getPointerKey(ptr);
+        if(key!= GLOBAL_KEY) { 
+            _f_tasmcPrintf("\n TaSMChecking:: temporal load check, global  key errors. key = %zx,ptr =%zx\n", 
+                key,ptr);
+            _f_callAbort(ERROR_OF_TEMPORAL_GLB);
+        }
+    }
+    else {  // stack
         size_t status = _f_checkPtrKeyWithFuncKey(ptr, functionId);
         if(status != PTR_KEY_OK) {
             size_t functionKey = _f_getFunctionKey(functionId);
