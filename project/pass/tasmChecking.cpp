@@ -928,25 +928,30 @@ void tasmChecking::scanfFirstPass(Function *func) {
       case Instruction::Ret: {
         ReturnInst *ret = dyn_cast<ReturnInst>(v1);
         assert(ret && "not a return inst?");
+               // associateTypeKey(v1,m_type_stack , funckey);
         handleReturnInst(ret);
       } break;
 
       case Instruction::ExtractElement: {
         ExtractElementInst *EEI = dyn_cast<ExtractElementInst>(v1);
         assert(EEI && "ExtractElementInst inst?");
+        associateTypeKey(v1,m_type_stack , funckey);
         handleExtractElement(EEI);
       } break;
 
       case Instruction::ExtractValue: {
         ExtractValueInst *EVI = dyn_cast<ExtractValueInst>(v1);
         assert(EVI && "handle extract value inst?");
+        associateTypeKey(v1,m_type_stack , funckey);
         handleExtractValue(EVI);
       } break;
 
       default:
-        if (isa<PointerType>(v1->getType()))
+        if (isa<PointerType>(v1->getType())) {
+          associateTypeKey(v1,m_type_stack , funckey);
           assert(!isa<PointerType>(v1->getType()) &&
                  " Generating Pointer and not being handled");
+        }
       }
     } // Basic Block iterator Ends
   }   // Function iterator Ends
@@ -2351,7 +2356,6 @@ void tasmChecking::handleCall(CallInst *call_inst) {
     SmallVector<Value *, 8> args;
     CallInst *ptrKey =
         CallInst::Create(m_f_allocatePtrKey, args, "", insert_at);
-
     associateTypeKey(ptr, m_type_heap, ptrKey);
   }
 
@@ -2916,7 +2920,10 @@ void tasmChecking::dissociateTypeKey(Value *ptr) {
   assert((m_pointer_key.count(ptr) == 0) && "dissociating bound failed");
 }
 Value *tasmChecking::getAssociatedKey(Value *ptr) {
-
+if(m_pointer_key.count(ptr) == 0) {
+    errs()<<*ptr<<"\n";
+      m_pointer_key[ptr] = m_global_key;
+  }
   assert(m_pointer_key.count(ptr) && "the key lost?");
 
   Value *key = m_pointer_key[ptr];
@@ -2926,9 +2933,13 @@ Value *tasmChecking::getAssociatedKey(Value *ptr) {
 }
 
 Value *tasmChecking::getAssociatedType(Value *ptr) {
-
-  assert(m_pointer_type.count(ptr) && "the type lost?");
-
+  
+  if(m_pointer_type.count(ptr) == 0) {
+    errs()<<*ptr<<"\n";
+      m_pointer_type[ptr] = m_type_other;
+  }
+ // assert(m_pointer_type.count(ptr) && "the type lost?");
+  
   Value *type = m_pointer_type[ptr];
   assert(type && "the type in the map but null?");
 
