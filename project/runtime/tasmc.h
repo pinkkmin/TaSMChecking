@@ -442,7 +442,7 @@ void _f_storeMetaData(void* addr_of_ptr, void* base, void* bound){
     // _f_printfPtrBaseBound(addr_of_ptr, base, bound);
 
     // printf("*******************************************\n");
-    // printf("bound: %zx\n", (size_t)bound);
+    // printf("base: %zx, bound: %zx\n", base, bound);
     // printf("*******************************************\n");
 
 } 
@@ -592,7 +592,7 @@ size_t _f_isFreeAbleOfPointer(void* ptr) {
 void _f_copyMetaData(void* addr_of_from, void* addr_of_dest){
     size_t from = (size_t)addr_of_from;
     size_t dest = (size_t)addr_of_dest;
-    // PS: 处理 字节不对齐情况
+   
 }
 
 // checking temporal and spatital， dereference
@@ -646,7 +646,7 @@ void _f_checkTemporalLoadPtr(void* ptr, size_t functionId){
             _f_callAbort(ERROR_OF_TEMPORAL_GLB);
         }
     }
-    else {  // stack
+     else if(type == TYPE_STACK) {  // stack
         size_t status = _f_checkPtrKeyWithFuncKey(ptr, functionId);
         if(status != PTR_KEY_OK) {
             size_t functionKey = _f_getFunctionKey(functionId);
@@ -678,7 +678,7 @@ void _f_checkTemporalStorePtr(void* ptr, size_t functionId) {
             _f_callAbort(ERROR_OF_TEMPORAL_GLB);
         }
     }
-    else {  // stack
+    else if(type == TYPE_STACK) {  // stack
         size_t status = _f_checkPtrKeyWithFuncKey(ptr, functionId);
         if(status != PTR_KEY_OK) {
             size_t functionKey = _f_getFunctionKey(functionId);

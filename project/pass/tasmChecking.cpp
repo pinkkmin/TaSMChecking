@@ -1166,10 +1166,10 @@ void tasmChecking::transformMainFunc(Module &module) {
   // errs()<<"transform main()\n";
   // doesn't have main then don't do anything
   if (!mainFunc) {
-    errs() << "have not main() function... ...\n";
-
+    // errs() << "have not main() function... ...\n";
+ 
     // need to do something.
-    exit(1);
+    return;
   }
 
   Type *retType = mainFunc->getReturnType();
@@ -2092,6 +2092,7 @@ void tasmChecking::insertLoadStoreChecks(Instruction *Inst) {
     // ldi->setOperand(0, maskedPtr);
     // insertCallSiteSetPtrType(ptr, m_type_heap, insert_at);
     // insertCallSiteSetPtrKey(ptr, ptrKey, insert_at);
+   insertCallSiteDebugFunc(Inst);
     CallInst::Create(m_f_checkSpatialLoadPtr, args, "", Inst);
   } else {
     // StoreInst *sti = dyn_cast<StoreInst>(Inst);
@@ -2590,7 +2591,6 @@ void tasmChecking::insertStoreBaseBoundFunc(Value *addr_of_ptr, Value *base,
   pointer_bound_cast = castToVoidPtr(bound, insert_at);
 
   SmallVector<Value *, 8> args;
-
   args.push_back(pointer_dest_cast);
   args.push_back(pointer_base_cast);
   args.push_back(pointer_bound_cast);
@@ -2921,7 +2921,7 @@ void tasmChecking::dissociateTypeKey(Value *ptr) {
 }
 Value *tasmChecking::getAssociatedKey(Value *ptr) {
 if(m_pointer_key.count(ptr) == 0) {
-    errs()<<*ptr<<"\n";
+    // errs()<<*ptr<<"\n";
       m_pointer_key[ptr] = m_global_key;
   }
   assert(m_pointer_key.count(ptr) && "the key lost?");
@@ -2935,7 +2935,7 @@ if(m_pointer_key.count(ptr) == 0) {
 Value *tasmChecking::getAssociatedType(Value *ptr) {
   
   if(m_pointer_type.count(ptr) == 0) {
-    errs()<<*ptr<<"\n";
+    // errs()<<*ptr<<"\n";
       m_pointer_type[ptr] = m_type_other;
   }
  // assert(m_pointer_type.count(ptr) && "the type lost?");
