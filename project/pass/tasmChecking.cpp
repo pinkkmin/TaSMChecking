@@ -2092,7 +2092,7 @@ void tasmChecking::insertLoadStoreChecks(Instruction *Inst) {
     // ldi->setOperand(0, maskedPtr);
     // insertCallSiteSetPtrType(ptr, m_type_heap, insert_at);
     // insertCallSiteSetPtrKey(ptr, ptrKey, insert_at);
-   insertCallSiteDebugFunc(Inst);
+   //insertCallSiteDebugFunc(Inst);
     CallInst::Create(m_f_checkSpatialLoadPtr, args, "", Inst);
   } else {
     // StoreInst *sti = dyn_cast<StoreInst>(Inst);
