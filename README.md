@@ -1,20 +1,34 @@
-# TaSMChecking
+# TaSMCheck
 
 The Temporal and Spatial Memory Safety Checking For C at Runtime.
 
-```
-|- mess
-|- test
+```bash
+|- Mibench
+   |- adpcm
+   |- basicmath
+   |- CRC32
+   |- FFT
+   |- qsort
+   |- sha
+   |- susan
+
+|- test_dev
    |- add-function-from-lib
    |- identity-pointer
    |- maksing-pointer
    |- use-libtasmc
    |- check-spatial
    |- test-shadow-stack
+
 |- project
    |- rumtime
    |- pass
+
+|- test_unit
+   |- Spatial
+   |- Temporal
 ```
+
 ## Todo
 
 - [x] writing runtime library
@@ -22,13 +36,14 @@ The Temporal and Spatial Memory Safety Checking For C at Runtime.
    - [x] for stack
    - [x] for global
 - [x] writing LLVM Pass 
-   - [x] initPass
-   - [ ] ...
 - [ ] Writing note/blog
-   - [ ] developing pass out of source
+   - [x] developing pass out of source
    - [x] learning pass: create [LLVM IR]
-- [ ] design&review
+- [x] design&review
 - [x] testing
 - [x] listen to **Sugar Plum Ferry**. 
-- [ ] check more......
+- [ ] check more.....
+- [ ] bugs.....
+
 ## REF
+
